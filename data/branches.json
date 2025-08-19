@@ -1,0 +1,52 @@
+[
+  {
+    "id": 1,
+    "name": "Adrogué",
+    "address": "Av. Hipólito Yrigoyen 13298, Adrogué"
+  },
+  {
+    "id": 2,
+    "name": "Avellaneda Local",
+    "address": "Güemes 897, Alto Avellaneda, Avellaneda"
+  },
+  {
+    "id": 3,
+    "name": "Avellaneda Stand",
+    "address": "Güemes 897, Alto Avellaneda (Stand), Avellaneda"
+  },
+  {
+    "id": 4,
+    "name": "Banfield Outlet",
+    "address": "Av. Larroque, Banfield"
+  },
+  {
+    "id": 5,
+    "name": "Brown",
+    "address": "Av. Fernández de la Cruz 4602, Factory Parque Brown, CABA"
+  },
+  {
+    "id": 6,
+    "name": "Lomas",
+    "address": "Av. Antártida Argentina 799, Portal Lomas, Lomas de Zamora"
+  },
+  {
+    "id": 7,
+    "name": "Martínez Local",
+    "address": "Paraná 3745, Unicenter, Martínez"
+  },
+  {
+    "id": 8,
+    "name": "Martínez Stand",
+    "address": "Paraná 3745, Unicenter (Stand), Martínez"
+  },
+  {
+    "id": 9,
+    "name": "Plaza Oeste",
+    "address": "Av. Vergara, Morón"
+  },
+  {
+    "id": 10,
+    "name": "Abasto",
+    "address": "Av. Corrientes 3247, CABA"
+  }
+]

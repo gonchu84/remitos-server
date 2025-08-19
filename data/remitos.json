@@ -1,0 +1,71 @@
+[
+  {
+    "id": "8ac2f1ee-e101-491f-824d-1bff4896c6fd",
+    "numero": "R1755527432901",
+    "fecha": "2025-08-18",
+    "origin": "Juan Manuel de Rosas 1325",
+    "branch": {
+      "id": 3,
+      "name": "Avellaneda Stand",
+      "address": "Güemes 897, Alto Avellaneda (Stand), Avellaneda"
+    },
+    "items": [
+      {
+        "description": "1081000016436",
+        "qty": 1,
+        "okQty": 0,
+        "status": "pendiente"
+      }
+    ],
+    "pdf": "/files/Remito_Avellaneda_Stand_R1755527432901.pdf",
+    "status": "pendiente"
+  },
+  {
+    "id": "5fe1f64d-214f-4ef7-bc24-6bb0ea0774b0",
+    "numero": "R1755522484379",
+    "fecha": "2025-08-18",
+    "origin": "Juan Manuel de Rosas 1325",
+    "branch": {
+      "id": 2,
+      "name": "Avellaneda Local",
+      "address": "Güemes 897, Alto Avellaneda, Avellaneda"
+    },
+    "items": [
+      {
+        "description": "1081000016436",
+        "qty": 1,
+        "okQty": 0,
+        "status": "pendiente"
+      }
+    ],
+    "pdf": "/files/Remito_Avellaneda_Local_R1755522484379.pdf",
+    "status": "pendiente"
+  },
+  {
+    "id": "d4a600f7-cc1a-4fea-88cb-e0fa5d26c9e6",
+    "numero": "R1755522369435",
+    "fecha": "2025-08-18",
+    "origin": "Juan Manuel de Rosas 1325",
+    "branch": {
+      "id": 1,
+      "name": "Adrogué",
+      "address": "Av. Hipólito Yrigoyen 13298, Adrogué"
+    },
+    "items": [
+      {
+        "description": "asd",
+        "qty": 1,
+        "okQty": 0,
+        "status": "pendiente"
+      },
+      {
+        "description": "as",
+        "qty": 1,
+        "okQty": 0,
+        "status": "pendiente"
+      }
+    ],
+    "pdf": "/files/Remito_Adrogué_R1755522369435.pdf",
+    "status": "pendiente"
+  }
+]
