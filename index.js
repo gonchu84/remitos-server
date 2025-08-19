@@ -39,6 +39,17 @@ const norm = (s) => String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({ origin: "*", credentials: false }));
+// bienvenida en raíz
+app.get("/", (req, res) => {
+  res.send("Servidor de Remitos corriendo 🚀");
+});
+
+// compatibilidad: permitir prefijo /api/* redirigiendo internamente a las rutas sin /api
+app.use("/api", (req, res, next) => {
+  req.url = req.url.replace(/^\/api/, "");
+  next();
+});
+
 
 fsExtra.ensureDirSync(PDF_DIR);
 fsExtra.ensureDirSync(UP_DIR);
