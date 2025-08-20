@@ -313,21 +313,9 @@ app.post("/admin/products-xlsx", upload.single("file"), (req, res) => {
 /* ────────────────────────────────
    Remitos
    ──────────────────────────────── */
-function waShareLink(remito) {
-  const base = remito.publicUrl ? `${reqBase()}{PUBLIC}` : "";
-  const pdfUrl = `${reqBase()}${remito.pdf || ""}`;
-  const rURL = `${reqBase()}${remito.publicUrl || ""}`;
-  const txt = `Remito Nº ${remito.numero}%0A` +
-              `Fecha: ${remito.fecha}%0A` +
-              `Origen: ${encodeURIComponent(remito.origin)}%0A` +
-              `Destino: ${encodeURIComponent(remito.branch.name)}%0A` +
-              `Ver PDF: ${encodeURIComponent(pdfUrl)}%0A` +
-              `Recepción: ${encodeURIComponent(rURL)}`;
-  return `https://wa.me/?text=${txt}`;
-}
 function reqBase() {
-  // Render setea X-Forwarded-Proto/Host; como fallback usamos el onrender
-  return process.env.PUBLIC_BASE_URL || ""; // si querés setearlo en env para URLs absolutas
+  // Usá PUBLIC_BASE_URL en Render para URLs absolutas (opcional)
+  return process.env.PUBLIC_BASE_URL || "";
 }
 
 app.post("/remitos", (req, res) => {
@@ -595,7 +583,8 @@ thead th{background:#f1f5f9}
       <button class="btn" onclick="closeOk()">OK Final</button>
       <button class="btn secondary" onclick="sendDiff()">Enviar diferencias</button>
       <a class="btn secondary" href="${r.pdf}" target="_blank">Abrir PDF</a>
-      <a class="btn secondary" href="${r.wa || ('https://wa.me/?text='+encodeURIComponent('Remito '+${r.numero}))}" target="_blank">WhatsApp</a>
+      <!-- ✅ FIX: nada de template literal anidado -->
+      <a class="btn secondary" href="${r.wa || ('https://wa.me/?text='+encodeURIComponent('Remito '+r.numero))}" target="_blank">WhatsApp</a>
       <div id="msg" style="margin-left:auto;color:#059669"></div>
     </div>
     <div id="scanErr" style="color:#b91c1c;margin-top:8px"></div>
