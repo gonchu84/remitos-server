@@ -80,37 +80,41 @@ fsExtra.ensureDirSync(UP_DIR);
 app.use("/pdf", express.static(PDF_DIR));
 
 // ====== Seed sucursales ======
+// -------------------- seed sucursales --------------------
 app.get("/seed", (req, res) => {
   const db = loadDB();
   if (db.branches && db.branches.length > 0) {
     return res.send("Seed ya ejecutado.");
   }
   db.branches = [
-    { id: 1,  name: "Adrogué",             address: "Av. Hipólito Yrigoyen 13298, Adrogué",                             phone: "" },
-    { id: 2,  name: "Avellaneda Local",    address: "Güemes 897, Alto Avellaneda, Avellaneda",                          phone: "" },
-    { id: 3,  name: "Avellaneda Stand",    address: "Güemes 897, Alto Avellaneda (Stand), Avellaneda",                  phone: "" },
-    { id: 4,  name: "Banfield Outlet",     address: "Av. Larroque, Banfield",                                           phone: "" },
-    { id: 5,  name: "Brown",               address: "Av. Fernández de la Cruz 4602, Factory Parque Brown, CABA",        phone: "" },
-    { id: 6,  name: "Lomas",               address: "Av. Antártida Argentina 799, Portal Lomas, Lomas de Zamora",       phone: "" },
-    { id: 7,  name: "Martínez Local",      address: "Paraná 3745, Unicenter, Martínez",                                  phone: "" },
-    { id: 8,  name: "Martínez Stand",      address: "Paraná 3745, Unicenter (Stand), Martínez",                          phone: "" },
-    { id: 9,  name: "Plaza Oeste",         address: "Av. Vergara, Morón",                                                phone: "" },
-    { id: 10, name: "Abasto",              address: "Av. Corrientes 3247, CABA",                                         phone: "" }
+    { id: 1,  name: "Adrogué",             address: "Av. Hipólito Yrigoyen 13298, Adrogué", phone: "" },
+    { id: 2,  name: "Avellaneda Local",    address: "Güemes 897, Alto Avellaneda, Avellaneda", phone: "" },
+    { id: 3,  name: "Avellaneda Stand",    address: "Güemes 897, Alto Avellaneda (Stand), Avellaneda", phone: "" },
+    { id: 4,  name: "Banfield Outlet",     address: "Av. Larroque, Banfield", phone: "" },
+    { id: 5,  name: "Brown",               address: "Av. Fernández de la Cruz 4602, Factory Parque Brown, CABA", phone: "" },
+    { id: 6,  name: "Lomas",               address: "Av. Antártida Argentina 799, Portal Lomas, Lomas de Zamora", phone: "" },
+    { id: 7,  name: "Martínez Local",      address: "Paraná 3745, Unicenter, Martínez", phone: "" },
+    { id: 8,  name: "Martínez Stand",      address: "Paraná 3745, Unicenter (Stand), Martínez", phone: "" },
+    { id: 9,  name: "Plaza Oeste",         address: "Av. Vergara, Morón", phone: "" },
+    { id: 10, name: "Abasto",              address: "Av. Corrientes 3247, CABA", phone: "" }
   ];
   saveDB(db);
   res.send("OK: sucursales creadas.");
 });
+
+
 
 // ====== Branches ======
 app.get("/branches", (req, res) => {
   const db = loadDB();
   res.json(db.branches || []);
 });
+/** ADD branch: POST /branches/add  { name, address, phone? } */
 app.post("/branches/add", (req, res) => {
   const db = loadDB();
   const name = String(req.body.name || "").trim();
   const address = String(req.body.address || "").trim();
-  const phone = String(req.body.phone || "").trim();
+  const phone = String(req.body.phone || "").trim(); // NUEVO
   if (!name) return res.status(400).json({ error: "Nombre requerido" });
 
   const id = (db.branches?.reduce((m, b) => Math.max(m, b.id), 0) || 0) + 1;
@@ -119,22 +123,25 @@ app.post("/branches/add", (req, res) => {
   saveDB(db);
   res.json({ ok: true, branch: { id, name, address, phone } });
 });
+
+/** UPDATE branch: POST /branches/:id/update  { name, address, phone? } */
 app.post("/branches/:id/update", (req, res) => {
   const db = loadDB();
   const id = Number(req.params.id);
   const name = String(req.body.name || "").trim();
   const address = String(req.body.address || "").trim();
-  const phone = String(req.body.phone || "").trim();
+  const phone = String(req.body.phone || "").trim(); // NUEVO
   const b = (db.branches || []).find(x => x.id === id);
   if (!b) return res.status(404).json({ error: "Sucursal no existe" });
   if (!name) return res.status(400).json({ error: "Nombre requerido" });
 
   b.name = name;
   b.address = address;
-  b.phone = phone;
+  b.phone = phone; // NUEVO
   saveDB(db);
   res.json({ ok: true, branch: b });
 });
+
 app.post("/branches/:id/delete", (req, res) => {
   const db = loadDB();
   const id = Number(req.params.id);
