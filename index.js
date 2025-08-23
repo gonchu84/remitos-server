@@ -532,6 +532,37 @@ app.post("/remitos/:id/receive-by-desc", (req, res) => {
   });
 });
 
+// Sumar 1 al recibido buscando por descripción (folded)
+app.post("/remitos/:id/receive-by-desc", (req, res) => {
+  const db = loadDB();
+  const id = Number(req.params.id);
+  const { description } = req.body || {};
+  const remito = (db.remitos || []).find(x => x.id === id);
+  if (!remito) return res.status(404).json({ error: "No existe" });
+
+  const fold = s => String(s||"").toLowerCase()
+    .normalize('NFD').replace(/\p{Diacritic}/gu,'')
+    .replace(/\s+/g,' ').trim();
+
+  const q = fold(description||"");
+  if(!q) return res.status(400).json({ error: "Descripción requerida" });
+
+  const idx = remito.items.findIndex(it => fold(it.description).includes(q));
+  if (idx === -1) return res.status(404).json({ error:"No se encontró ese renglón" });
+
+  const it = remito.items[idx];
+  it.received = Math.min(it.qty, (parseInt(it.received,10)||0) + 1);
+
+  const allOk  = remito.items.every(x => (x.received|0) === (x.qty|0));
+  const anyOver= remito.items.some(x => (x.received|0) >  (x.qty|0));
+  const anyDiff= remito.items.some(x => (x.received|0) !== (x.qty|0));
+  remito.status = allOk && !anyOver ? "ok" : (anyDiff ? "diferencias" : "pendiente");
+
+  saveDB(db);
+  res.json({ ok:true, item:{ index:idx, description:it.description, qty:it.qty, received:it.received }, status: remito.status });
+});
+
+
 app.post("/remitos/:id/close", (req, res) => {
   const db = loadDB();
   const id = Number(req.params.id);
@@ -588,6 +619,17 @@ app.get("/r/:id", (req, res) => {
       "</tr>"
     );
   }).join("");
+
+  // Lista para sugerencias: descripción + códigos del producto
+const fold = s => String(s||"").toLowerCase()
+  .normalize('NFD').replace(/\p{Diacritic}/gu,'')
+  .replace(/\s+/g,' ').trim();
+
+const itemsForJs = (r.items || []).map(it => {
+  const prod = (db.products || []).find(p => fold(p.description) === fold(it.description));
+  return { description: it.description, codes: prod?.codes || [] };
+});
+
 
 
 
@@ -660,6 +702,9 @@ app.get("/r/:id", (req, res) => {
 "</div>" +
 
 "<script>" +
+"  const BASE = location.origin.replace(':5173', ':4000');" +
+"  const RID = " + r.id + ";" +
+"  window.__ITEMS = " + JSON.stringify(itemsForJs) + ";" +
 "  const BASE = location.origin.replace(':5173', ':4000');" +
 "  const RID = " + r.id + ";" +
 
