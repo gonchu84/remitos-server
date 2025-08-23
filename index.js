@@ -472,269 +472,135 @@ app.get("/r/:id", (req, res) => {
   const r = (db.remitos || []).find(x => x.id === id);
   if (!r) return res.status(404).send("Remito inexistente");
 
-  const codesByDesc = {};
-  (db.products || []).forEach(p => {
-    const k = String(p.description || "").trim().toLowerCase();
-    const arr = (p.codes || []).map(String);
-    if (!codesByDesc[k]) codesByDesc[k] = [];
-    codesByDesc[k].push(...arr);
-  });
+  // WhatsApp seguro
+  const waHref = r.wa
+    ? r.wa
+    : "https://wa.me/?text=" + encodeURIComponent("Remito " + r.numero);
 
-  const html = `
-<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Recepción de Remito ${r.numero}</title>
-<style>
-  :root{ --line:#e2e8f0; --muted:#64748b; --primary:#0ea5e9; }
-  body{font-family:system-ui;margin:0;background:#f6faff;color:#0f172a}
-  .wrap{max-width:900px;margin:0 auto;padding:16px}
-  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}
-  .row{display:flex;gap:10px;align-items:center}
-  .input{padding:10px;border:1px solid var(--line);border-radius:10px;width:100%}
-  .btn{padding:10px 14px;border-radius:10px;border:1px solid var(--primary);background:var(--primary);color:#fff;cursor:pointer}
-  .btn.secondary{background:#fff;color:var(--primary)}
-  table{border-collapse:collapse;width:100%}
-  td,th{border-top:1px solid var(--line);padding:8px}
-  thead th{background:#f1f5f9}
-  .pill{padding:4px 8px;border:1px solid var(--line);border-radius:999px;font-size:12px}
-  .pill.ok{background:#ecfeff}
-  .pill.diff{background:#fff1f2}
-  .pill.pend{background:#fff7ed}
-  .modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:50}
-  .modal{width:min(680px,92vw);background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <h2>Recepción — Remito ${r.numero}</h2>
-  <div class="card">
-    <div class="row" style="flex-wrap:wrap">
-      <div><b>Fecha:</b> ${r.fecha}</div>
-      <div><b>Origen:</b> ${r.origin}</div>
-      <div><b>Destino:</b> ${r.branch?.name || ""}</div>
-      <div><b>Estado:</b> <span id="st" class="pill ${r.status==="ok"?"ok":r.status==="diferencias"?"diff":"pend"}">${String(r.status).toUpperCase()}</span></div>
-    </div>
+  // Filas de la tabla
+  const rowsHtml = (r.items || []).map((it, i) => {
+    const desc = String(it.description || "").replace(/"/g, "&quot;");
+    const qty = parseInt(it.qty, 10) || 0;
+    const rec = parseInt(it.received, 10) || 0;
+    return (
+      "<tr data-desc=\"" + desc + "\">" +
+        "<td>" + (i + 1) + "</td>" +
+        "<td>" + desc + "</td>" +
+        "<td>" + qty + "</td>" +
+        "<td id=\"rcv_" + i + "\">" + rec + "</td>" +
+      "</tr>"
+    );
+  }).join("");
 
-    <div class="row" style="margin-top:10px; flex-wrap:wrap">
-      <input id="scan" class="input" placeholder="Escaneá o pegá un código y Enter" />
-      <input id="find" class="input" placeholder="Buscar por descripción o código (filtra la tabla)" />
-      <button class="btn secondary" onclick="reload()">Actualizar</button>
-    </div>
+  const html =
+"<!doctype html>" +
+"<html lang=\"es\">" +
+"<head>" +
+"<meta charset=\"utf-8\"/>" +
+"<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>" +
+"<title>Recepción de Remito " + r.numero + "</title>" +
+"<style>" +
+"  :root{ --line:#e2e8f0; --muted:#64748b; --primary:#0ea5e9; }" +
+"  body{font-family:system-ui;margin:0;background:#f6faff;color:#0f172a}" +
+"  .wrap{max-width:900px;margin:0 auto;padding:16px}" +
+"  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}" +
+"  .row{display:flex;gap:10px;align-items:center}" +
+"  .input{padding:10px;border:1px solid var(--line);border-radius:10px;width:100%}" +
+"  .btn{padding:10px 14px;border-radius:10px;border:1px solid var(--primary);background:var(--primary);color:#fff;cursor:pointer;text-decoration:none;display:inline-block}" +
+"  .btn.secondary{background:#fff;color:var(--primary)}" +
+"  table{border-collapse:collapse;width:100%}" +
+"  td,th{border-top:1px solid var(--line);padding:8px}" +
+"  thead th{background:#f1f5f9}" +
+"  .pill{padding:4px 8px;border:1px solid var(--line);border-radius:999px;font-size:12px}" +
+"  .pill.ok{background:#ecfeff}" +
+"  .pill.diff{background:#fff1f2}" +
+"  .pill.pend{background:#fff7ed}" +
+"  .modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:50}" +
+"  .modal{width:min(680px,92vw);background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}" +
+"</style>" +
+"</head>" +
+"<body>" +
+"<div class=\"wrap\">" +
+"  <h2>Recepción — Remito " + r.numero + "</h2>" +
+"  <div class=\"card\">" +
+"    <div class=\"row\" style=\"flex-wrap:wrap\">" +
+"      <div><b>Fecha:</b> " + r.fecha + "</div>" +
+"      <div><b>Origen:</b> " + r.origin + "</div>" +
+"      <div><b>Destino:</b> " + (r.branch && r.branch.name ? r.branch.name : "") + "</div>" +
+"      <div><b>Estado:</b> <span id=\"st\" class=\"pill " + (r.status === "ok" ? "ok" : (r.status === "diferencias" ? "diff" : "pend")) + "\">" + String(r.status || "").toUpperCase() + "</span></div>" +
+"    </div>" +
 
-    <div style="margin-top:12px">
-      <table>
-        <thead><tr><th>#</th><th>Descripción</th><th>Enviado</th><th>Recibido</th></tr></thead>
-        <tbody id="tb">
-          ${(r.items||[]).map((it,i)=>{
-            const k = String(it.description||"").trim().toLowerCase();
-            const codes = (codesByDesc[k] || []).join(",");
-            return \`
-            <tr data-desc="\${(it.description||"").replace(/"/g,'&quot;')}" data-codes="\${codes}">
-              <td>\${i+1}</td>
-              <td>\${it.description}</td>
-              <td>\${it.qty}</td>
-              <td id="rcv_\${i}">\${it.received||0}</td>
-            </tr>\`;
-          }).join("")}
-        </tbody>
-      </table>
-    </div>
+"    <div class=\"row\" style=\"margin-top:10px; flex-wrap:wrap\">" +
+"      <input id=\"scan\" class=\"input\" placeholder=\"Escaneá o pegá un código y Enter\" />" +
+"      <input id=\"find\" class=\"input\" placeholder=\"Buscar por descripción (filtra la tabla)\" />" +
+"      <button class=\"btn secondary\" onclick=\"reload()\">Actualizar</button>" +
+"      <a class=\"btn secondary\" href=\"" + waHref + "\" target=\"_blank\">WhatsApp</a>" +
+"    </div>" +
 
-    <div class="row" style="margin-top:12px">
-      <button class="btn" onclick="closeOk()">OK Final</button>
-      <button class="btn secondary" onclick="sendDiff()">Enviar diferencias</button>
-      ${r.wa ? `<a class="btn secondary" href="${r.wa}" target="_blank">WhatsApp</a>` : ``}
-      <div id="msg" style="margin-left:auto;color:#059669"></div>
-    </div>
-    <div id="scanErr" style="color:#b91c1c;margin-top:8px"></div>
-  </div>
+"    <div style=\"margin-top:12px\">" +
+"      <table>" +
+"        <thead><tr><th>#</th><th>Descripción</th><th>Enviado</th><th>Recibido</th></tr></thead>" +
+"        <tbody id=\"tb\">" +
+            rowsHtml +
+"        </tbody>" +
+"      </table>" +
+"    </div>" +
 
-  <div class="card" style="margin-top:12px">
-    <div><b>PDF:</b> <a href="${r.pdf}" target="_blank">${r.pdf}</a></div>
-    <iframe title="PDF" src="${r.pdf}" style="width:100%;height:520px;border:1px solid var(--line);border-radius:10px;margin-top:6px"></iframe>
-  </div>
-</div>
+"    <div class=\"row\" style=\"margin-top:12px\">" +
+"      <button class=\"btn\" onclick=\"closeOk()\">OK Final</button>" +
+"      <button class=\"btn secondary\" onclick=\"sendDiff()\">Enviar diferencias</button>" +
+"      <div id=\"msg\" style=\"margin-left:auto;color:#059669\"></div>" +
+"    </div>" +
+"    <div id=\"scanErr\" style=\"color:#b91c1c;margin-top:8px\"></div>" +
+"  </div>" +
 
-<!-- Modal Crear/Vincular código desconocido -->
-<div id="u-backdrop" class="modal-backdrop">
-  <div class="modal">
-    <h3>El código <code id="u-code"></code> no existe</h3>
-    <div class="row" style="margin:8px 0">
-      <button id="u-tab-create" class="btn">➕ Crear producto</button>
-      <button id="u-tab-link" class="btn secondary">🔗 Vincular a existente</button>
-      <span style="flex:1"></span>
-      <button id="u-close" class="btn secondary">Cerrar</button>
-    </div>
-    <div id="u-create">
-      <label>Descripción</label>
-      <input id="u-desc" type="text" class="input"/>
-      <div class="row" style="margin-top:10px"><button id="u-create-go" class="btn">Crear</button></div>
-    </div>
-    <div id="u-link" style="display:none">
-      <label>Buscar producto</label>
-      <input id="u-q" type="text" class="input"/>
-      <div id="u-list" style="max-height:260px;overflow:auto;margin-top:8px;border:1px solid var(--line);border-radius:10px;padding:6px"></div>
-    </div>
-  </div>
-</div>
+"  <div class=\"card\" style=\"margin-top:12px\">" +
+"    <div><b>PDF:</b> <a href=\"" + r.pdf + "\" target=\"_blank\">" + r.pdf + "</a></div>" +
+"    <iframe title=\"PDF\" src=\"" + r.pdf + "\" style=\"width:100%;height:520px;border:1px solid var(--line);border-radius:10px;margin-top:6px\"></iframe>" +
+"  </div>" +
+"</div>" +
 
-<script>
-  const BASE = location.origin.replace(':5173', ':4000');
-  const RID = ${r.id};
+"<script>" +
+"  const BASE = location.origin.replace(':5173', ':4000');" +
+"  const RID = " + r.id + ";" +
 
-  function showMsg(t){ const e=document.getElementById('msg'); e.textContent=t; setTimeout(()=>e.textContent='', 2500); }
-  function showErr(id, t){ const e=document.getElementById(id); e.textContent=t; setTimeout(()=>e.textContent='', 2500); }
-  function cls(c){ return c==='ok'?'ok':(c==='diferencias'?'diff':'pend'); }
+"  function showMsg(t){ const e=document.getElementById('msg'); e.textContent=t; setTimeout(()=>e.textContent='', 2500); }" +
+"  function showErr(id, t){ const e=document.getElementById(id); e.textContent=t; setTimeout(()=>e.textContent='', 2500); }" +
+"  function cls(c){ return c==='ok'?'ok':(c==='diferencias'?'diff':'pend'); }" +
 
-  async function reload(){
-    const r = await fetch(\`\${BASE}/remitos/\${RID}\`);
-    const data = await r.json();
-    (data.items||[]).forEach((it,i)=>{
-      const td = document.getElementById('rcv_'+i);
-      if (td) td.textContent = it.received||0;
-    });
-    const st = document.getElementById('st');
-    st.textContent = String(data.status||'').toUpperCase();
-    st.className = 'pill '+cls(data.status||'pendiente');
-  }
+"  async function reload(){ const rr = await fetch(BASE + '/remitos/' + RID); const data = await rr.json();" +
+"    (data.items||[]).forEach((it,i)=>{ const td=document.getElementById('rcv_'+i); if(td) td.textContent=it.received||0; });" +
+"    const st=document.getElementById('st'); st.textContent=String(data.status||'').toUpperCase(); st.className='pill '+cls(data.status||'pendiente'); }" +
 
-  document.getElementById('scan').addEventListener('keydown', async (e)=>{
-    if (e.key !== 'Enter') return;
-    const t = e.target.value.trim();
-    if (!t) return;
-    e.target.value = '';
-    document.getElementById('scanErr').textContent = '';
+"  document.getElementById('scan').addEventListener('keydown', async (e)=>{" +
+"    if (e.key !== 'Enter') return; const t = e.target.value.trim(); if(!t) return; e.target.value=''; document.getElementById('scanErr').textContent='';" +
+"    const rr = await fetch(BASE + '/remitos/' + RID + '/scan', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: t }) });" +
+"    if(!rr.ok){ const j=await rr.json().catch(async()=>({error:await rr.text()}));" +
+"      if(j.reason==='unknown_code'){ alert('Código desconocido. Debe crearse o vincularse en Central/Productos.'); return; }" +
+"      else if(j.reason==='not_in_remito'){ alert('El producto existe, pero no está en este remito.'); return; }" +
+"      else { showErr('scanErr', j.error||'No se pudo registrar'); return; } }" +
+"    const j = await rr.json(); if (j && j.item){ const td=document.getElementById('rcv_'+j.item.index); if(td) td.textContent=j.item.received; }" +
+"    const st=document.getElementById('st'); st.textContent=String(j.status||'').toUpperCase(); st.className='pill '+cls(j.status||'pendiente');" +
+"  });" +
 
-    const r = await fetch(\`\${BASE}/remitos/\${RID}/scan\`, {
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: t })
-    });
+"  document.getElementById('find').addEventListener('input', (e)=>{ const q=e.target.value.trim().toLowerCase();" +
+"    Array.from(document.querySelectorAll('#tb tr')).forEach(tr=>{ const desc=(tr.getAttribute('data-desc')||'').toLowerCase();" +
+"      tr.style.display = q ? (desc.includes(q)? '' : 'none') : ''; });" +
+"  });" +
 
-    if(!r.ok){
-      const j=await r.json().catch(async()=>({error:await r.text()}));
-      if(j.reason==="unknown_code"){
-        ensureUnknownModal();
-        openUnknownModal(t);
-        return;
-      } else if (j.reason==="not_in_remito") {
-        alert("El producto existe, pero no está en este remito.");
-        return;
-      } else {
-        showErr("scanErr", j.error || "No se pudo registrar"); return;
-      }
-    }
+"  async function closeOk(){ const rr=await fetch(BASE + '/remitos/' + RID + '/close', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'ok' }) });" +
+"    if(!rr.ok){ const j=await rr.json().catch(()=>({})); alert(j.error||'No se pudo cerrar en OK'); return; } showMsg('Remito cerrado en OK'); reload(); }" +
 
-    const j = await r.json();
-    if (j?.item){
-      const td = document.getElementById('rcv_'+j.item.index);
-      if (td) td.textContent = j.item.received;
-    }
-    const st = document.getElementById('st');
-    st.textContent = String(j.status||'').toUpperCase();
-    st.className = 'pill '+cls(j.status||'pendiente');
-  });
+"  async function sendDiff(){ const note = prompt('Describí las diferencias:','');" +
+"    const rr = await fetch(BASE + '/remitos/' + RID + '/close', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'diferencias', note }) });" +
+"    if(!rr.ok){ alert('No se pudo enviar diferencias'); return; } showMsg('Diferencias enviadas'); reload(); }" +
+"</script>" +
+"</body></html>";
 
-  // Filtro por descripción + códigos
-  document.getElementById('find').addEventListener('input', (e)=>{
-    const q = e.target.value.trim().toLowerCase();
-    const rows = Array.from(document.querySelectorAll('#tb tr'));
-    rows.forEach(tr=>{
-      const desc = (tr.getAttribute('data-desc')||'').toLowerCase();
-      const codes = (tr.getAttribute('data-codes')||'').toLowerCase();
-      const show = !q || desc.includes(q) || codes.includes(q);
-      tr.style.display = show ? '' : 'none';
-    });
-  });
-
-  async function closeOk(){
-    const r = await fetch(\`\${BASE}/remitos/\${RID}/close\`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'ok' }) });
-    if(!r.ok){ const j=await r.json().catch(()=>({})); alert(j.error||'No se pudo cerrar en OK'); return; }
-    showMsg('Remito cerrado en OK');
-    reload();
-  }
-  async function sendDiff(){
-    const note = prompt('Describí las diferencias:','');
-    const r = await fetch(\`\${BASE}/remitos/\${RID}/close\`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'diferencias', note }) });
-    if(!r.ok){ alert('No se pudo enviar diferencias'); return; }
-    showMsg('Diferencias enviadas');
-    reload();
-  }
-
-  // Modal desconocido: crear/vincular
-  function ensureUnknownModal(){
-    if (document.getElementById("u-backdrop").dataset.ready==="1") return;
-    document.getElementById("u-close").onclick = closeUnknownModal;
-    document.getElementById("u-tab-create").onclick = ()=>{ 
-      document.getElementById("u-create").style.display="block";
-      document.getElementById("u-link").style.display="none";
-      document.getElementById("u-tab-create").className="btn";
-      document.getElementById("u-tab-link").className="btn secondary";
-    };
-    document.getElementById("u-tab-link").onclick = ()=>{ 
-      document.getElementById("u-create").style.display="none";
-      document.getElementById("u-link").style.display="block";
-      document.getElementById("u-tab-create").className="btn secondary";
-      document.getElementById("u-tab-link").className="btn";
-    };
-    document.getElementById("u-create-go").onclick = async ()=>{
-      const code = document.getElementById("u-backdrop").dataset.code;
-      const desc = document.getElementById("u-desc").value.trim();
-      if(!desc){ alert("Escribí la descripción"); return; }
-      const r2 = await fetch(\`\${BASE}/products\`, {
-        method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify({ description: desc, code })
-      });
-      if(!r2.ok){ alert("No pude crear el producto"); return; }
-      alert("Producto creado. Volvé a escanear el ítem.");
-      closeUnknownModal();
-    };
-    document.getElementById("u-q").addEventListener("input", ()=>{
-      const q = document.getElementById("u-q").value;
-      clearTimeout(window.__u_t);
-      window.__u_t = setTimeout(async ()=>{
-        const r = await fetch(\`\${BASE}/products?q=\${encodeURIComponent(q)}\`);
-        const data = await r.json().catch(()=>[]);
-        const list = Array.isArray(data)?data:[];
-        const wrap = document.getElementById("u-list");
-        wrap.innerHTML = list.length? "" : "<div style='color:#64748b'>Sin resultados</div>";
-        list.slice(0,20).forEach(p=>{
-          const row = document.createElement("div");
-          row.style.padding="8px";
-          row.style.borderTop="1px solid #eef2f7";
-          row.innerHTML = \`<div style="font-weight:600">\${p.description}</div><div style="color:#64748b;font-size:12px">\${(p.codes||[]).join(" · ")||"—"}</div>\`;
-          row.onclick = async ()=>{
-            const r3 = await fetch(\`\${BASE}/products/\${p.id}/addCode\`, {
-              method:"POST", headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: document.getElementById("u-backdrop").dataset.code })
-            });
-            if(!r3.ok){ alert("No se pudo vincular (¿repetido o >3?)"); return; }
-            alert("Código vinculado. Volvé a escanear el ítem.");
-            closeUnknownModal();
-          };
-          wrap.appendChild(row);
-        });
-      }, 200);
-    });
-    document.getElementById("u-backdrop").dataset.ready="1";
-  }
-  function openUnknownModal(code){
-    const b = document.getElementById("u-backdrop");
-    document.getElementById("u-code").textContent = code;
-    document.getElementById("u-desc").value = "";
-    document.getElementById("u-q").value = "";
-    document.getElementById("u-list").innerHTML = "";
-    b.style.display = "flex";
-    b.dataset.code = code;
-  }
-  function closeUnknownModal(){
-    const b = document.getElementById("u-backdrop");
-    if (b) b.style.display = "none";
-  }
-</script>
-</body></html>
-  `;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(html);
 });
+
 
 // ======= PDF =======
 function generateRemitoPDF(remito, outPath) {
