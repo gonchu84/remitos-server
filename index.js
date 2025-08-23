@@ -498,6 +498,40 @@ app.post("/remitos/:id/scan", (req, res) => {
   saveDB(db);
   res.json({ ok: true, item: { index: idx, description: it.description, qty: it.qty, received: it.received }, status: remito.status });
 });
+/** POST /remitos/:id/receive-by-desc  { description } 
+ *  Incrementa 1 el recibido del ítem cuyo description matchee (normalizado).
+ */
+app.post("/remitos/:id/receive-by-desc", (req, res) => {
+  const db = loadDB();
+  const id = Number(req.params.id);
+  const remito = (db.remitos || []).find(x => x.id === id);
+  if (!remito) return res.status(404).json({ error: "No existe" });
+
+  const description = String(req.body.description || "").trim();
+  if (!description) return res.status(400).json({ error: "Descripción requerida" });
+
+  // match normalizado (como en /scan)
+  const idx = remito.items.findIndex(it => norm(it.description) === norm(description));
+  if (idx === -1) {
+    return res.status(404).json({ error: "No figura en el remito", reason: "not_in_remito" });
+  }
+
+  const it = remito.items[idx];
+  it.received = Math.min(it.qty, (parseInt(it.received,10) || 0) + 1);
+
+  const allOk  = remito.items.every(x => (parseInt(x.received,10)||0) === (parseInt(x.qty,10)||0));
+  const anyOver= remito.items.some (x => (parseInt(x.received,10)||0) >  (parseInt(x.qty,10)||0));
+  const anyDiff= remito.items.some (x => (parseInt(x.received,10)||0) !== (parseInt(x.qty,10)||0));
+  remito.status = allOk && !anyOver ? "ok" : (anyDiff ? "diferencias" : "pendiente");
+
+  saveDB(db);
+  res.json({
+    ok: true,
+    item: { index: idx, description: it.description, qty: it.qty, received: it.received },
+    status: remito.status
+  });
+});
+
 app.post("/remitos/:id/close", (req, res) => {
   const db = loadDB();
   const id = Number(req.params.id);
@@ -532,6 +566,8 @@ app.get("/r/:id", (req, res) => {
   // Filas de la tabla
     // Filas de la tabla (incluir códigos para búsquedas)
     // Filas de la tabla (incluir códigos para búsquedas)
+
+    
   const rowsHtml = (r.items || []).map((it, i) => {
     const desc = String(it.description || "").replace(/"/g, "&quot;");
     const qty  = parseInt(it.qty, 10) || 0;
@@ -646,20 +682,77 @@ app.get("/r/:id", (req, res) => {
 "    const st=document.getElementById('st'); st.textContent=String(j.status||'').toUpperCase(); st.className='pill '+cls(j.status||'pendiente');" +
 "  });" +
 
-"  function fold(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/\\p{Diacritic}/gu,'').replace(/\\s+/g,' ').trim(); }" +
-"  document.getElementById('find').addEventListener('input', (e)=>{ const fq=fold(e.target.value);" +
-"    const rows = Array.from(document.querySelectorAll('#tb tr'));" +
-"    let first=null;" +
-"    rows.forEach(tr=>{" +
-"      const text = (tr.getAttribute('data-desc')||'') + ' ' + (tr.getAttribute('data-codes')||'');" +
-"      const match = !fq || fold(text).includes(fq);" +
-"      tr.style.display = match ? '' : 'none';" +
-"      if(match && !first) first = tr;" +
+"  // ==== Sugerencias y Enter para sumar por descripción (estilo Pre-Remito) ====" +
+"  function foldCli(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/\\p{Diacritic}/gu,'').replace(/\\s+/g,' ').trim(); }" +
+"  const SUGG_MAX = 12;" +
+"  const findInput = document.getElementById('find');" +
+"" +
+"  // Dropdown de sugerencias" +
+"  let suggBox = document.createElement('div');" +
+"  suggBox.style.position='absolute';" +
+"  suggBox.style.zIndex='30';" +
+"  suggBox.style.left='16px';" +
+"  suggBox.style.right='16px';" +
+"  suggBox.style.background='#fff';" +
+"  suggBox.style.border='1px solid #e5e7eb';" +
+"  suggBox.style.borderRadius='10px';" +
+"  suggBox.style.marginTop='4px';" +
+"  suggBox.style.boxShadow='0 8px 24px rgba(15,23,42,.08)';" +
+"  suggBox.style.display='none';" +
+"  (function(){ var parent = findInput.parentElement; parent.style.position='relative'; parent.appendChild(suggBox); })();" +
+"" +
+"  function renderSugg(list){ suggBox.innerHTML=''; if(!list || !list.length){ suggBox.style.display='none'; return; }" +
+"    list.slice(0,SUGG_MAX).forEach(it=>{" +
+"      const row = document.createElement('div');" +
+"      row.style.padding='8px 10px'; row.style.cursor='pointer'; row.style.borderTop='1px solid #f2f4f7';" +
+"      row.innerHTML = '<div style=\"font-weight:600\">'+ it.description +'</div>' + (it.codes.length? '<div style=\"color:#64748b;font-size:12px\">'+ it.codes.join(' · ') +'</div>':'' );" +
+"      row.addEventListener('click', ()=>receiveByDesc(it.description));" +
+"      suggBox.appendChild(row);" +
 "    });" +
-"    rows.forEach(tr=> tr.style.background='');" +
-"    if(first){ first.style.background='#fffbe6'; first.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(()=>{ if(first) first.style.background=''; },700); }" +
+"    suggBox.style.display='block';" +
+"  }" +
+"" +
+"  async function receiveByDesc(desc){ " +
+"    const rr = await fetch(BASE + '/remitos/' + RID + '/receive-by-desc', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ description: desc }) });" +
+"    if(!rr.ok){ const j=await rr.json().catch(()=>({})); alert(j.error || 'No se pudo registrar'); return; }" +
+"    const j = await rr.json();" +
+"    if (j && j.item){ const td=document.getElementById('rcv_'+j.item.index); if(td) td.textContent=j.item.received; }" +
+"    const st=document.getElementById('st'); st.textContent=String(j.status||'').toUpperCase(); st.className='pill '+cls(j.status||'pendiente');" +
+"    findInput.value=''; suggBox.style.display='none';" +
+"  }" +
+"" +
+"  // Escribir => sugerencias desde los renglones del remito (descripción + códigos)" +
+"  findInput.addEventListener('input', (e)=>{ const q = foldCli(e.target.value); const items = (window.__ITEMS||[]);" +
+"    if(!q){ suggBox.style.display='none'; return; }" +
+"    const candidates = items.filter(it => {" +
+"      const text = foldCli(it.description + ' ' + (it.codes||[]).join(' '));" +
+"      return text.includes(q);" +
+"    });" +
+"    renderSugg(candidates);" +
 "  });" +
-
+"" +
+"  // Enter: si es código => /scan; si es texto con coincidencias => suma 1 al recibido" +
+"  findInput.addEventListener('keydown', async (e)=>{ if(e.key!=='Enter') return; const t = findInput.value.trim(); if(!t) return;" +
+"    const looksBarcode = /^\\d{6,}$/.test(t.replace(/\\s+/g,''));" +
+"    if(looksBarcode){" +
+"      const rr = await fetch(BASE + '/remitos/' + RID + '/scan', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: t }) });" +
+"      findInput.value=''; suggBox.style.display='none';" +
+"      if(!rr.ok){ const j=await rr.json().catch(async()=>({error:await rr.text()}));" +
+"        if(j.reason==='unknown_code'){ alert('Código desconocido. Crealo/vinculalo en Central → Productos.'); return; }" +
+"        else if(j.reason==='not_in_remito'){ alert('El producto existe, pero no está en este remito.'); return; }" +
+"        else { showErr('scanErr', j.error||'No se pudo registrar'); return; } }" +
+"      const j = await rr.json(); if (j && j.item){ const td=document.getElementById('rcv_'+j.item.index); if(td) td.textContent=j.item.received; }" +
+"      const st=document.getElementById('st'); st.textContent=String(j.status||'').toUpperCase(); st.className='pill '+cls(j.status||'pendiente');" +
+"      return;" +
+"    }" +
+"    const items = (window.__ITEMS||[]);" +
+"    const q = foldCli(t);" +
+"    const candidates = items.filter(it => {" +
+"      const text = foldCli(it.description + ' ' + (it.codes||[]).join(' '));" +
+"      return text.includes(q);" +
+"    });" +
+"    if(candidates.length){ await receiveByDesc(candidates[0].description); }" +
+"  });" +
 
 "  async function closeOk(){ const rr=await fetch(BASE + '/remitos/' + RID + '/close', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'ok' }) });" +
 "    if(!rr.ok){ const j=await rr.json().catch(()=>({})); alert(j.error||'No se pudo cerrar en OK'); return; } showMsg('Remito cerrado en OK'); reload(); }" +
