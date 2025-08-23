@@ -360,48 +360,93 @@ app.post("/admin/products-xlsx-json", upload.single("file"), async (req, res) =>
 });
 
 // ======= REMITOS =======
+// ======= REMITOS =======
 app.post("/remitos", (req, res) => {
   const db = loadDB();
   const { branch, origin, date, items } = req.body || {};
-  if (!branch?.id) return res.status(400).json({ error: "branch requerido" });
-  if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: "items vacío" });
 
+  if (!branch?.id) return res.status(400).json({ error: "branch requerido" });
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: "items vacío" });
+  }
+
+  // buscar sucursal completa (para el phone limpio)
   const fullBranch = (db.branches || []).find(b => b.id === Number(branch.id));
   const branchPhone = (fullBranch?.phone || "").replace(/\D+/g, "");
 
+  // numeración e id
   const numero = nextRemitoNumber(db);
   const id = (db.remitos?.reduce((m, r) => Math.max(m, r.id), 0) || 0) + 1;
 
+  // normalizar items
   const normItems = items.map(x => ({
     description: String(x.description || "").trim(),
     qty: parseInt(x.qty, 10) || 0,
     received: 0
   }));
 
+  // armar objeto remito (aún sin pdf/publicUrl)
   const remito = {
     id,
     numero,
-    fecha: date || new Date().toISOString().slice(0,10),
+    fecha: date || new Date().toISOString().slice(0, 10),
     origin: String(origin || "Juan Manuel de Rosas 1325"),
-    branch: { id: branch.id, name: branch.name, address: branch.address || "", phone: branchPhone },
+    branch: {
+      id: branch.id,
+      name: branch.name,
+      address: branch.address || "",
+      phone: branchPhone
+    },
     items: normItems,
     status: "pendiente"
   };
 
-const pdfRel = `/pdf/remito_${numero}.pdf`;
-
-  if (branchPhone) {
-    const msg = `Remito ${numero} (${remito.fecha})%0A${encodeURIComponent(remito.origin)}%20→%20${encodeURIComponent(remito.branch.name)}%0A${encodeURIComponent(publicAbs)}`;
-    remito.wa = `https://wa.me/549${branchPhone}?text=${msg}`;
+  // ===== PDF =====
+  const pdfRel = `/pdf/remito_${numero}.pdf`;
+  const pdfAbs = path.join(PDF_DIR, `remito_${numero}.pdf`);
+  try {
+    generateRemitoPDF(remito, pdfAbs);
+  } catch (e) {
+    console.error("Error generando PDF:", e);
+    return res.status(500).json({ error: "No se pudo generar el PDF" });
   }
 
+  // ===== URL pública de recepción =====
+  const publicRel = `/r/${id}`;
+
+  // ===== WhatsApp (si hay teléfono) =====
+  // armamos un texto prolijo y lo pasamos por waLink (ya limpia y hace encode)
+  let wa = null;
+  if (branchPhone) {
+    const text = [
+      `Remito ${numero} (${remito.fecha})`,
+      `${remito.origin} → ${remito.branch.name}`,
+      abs(publicRel) // absoluto para que abran directo
+    ].join("\n");
+    wa = waLink(branchPhone, text);
+  }
+
+  // guardar en remito
+  remito.pdf = pdfRel;          // relativo (el front hace `${API}${r.pdf}`)
+  remito.publicUrl = publicRel; // relativo
+  remito.wa = wa || null;
+
+  // persistir
   db.remitos = db.remitos || [];
   db.remitos.push(remito);
   saveDB(db);
 
-  res.json({ ok: true, id, numero, pdf: remito.pdf, publicUrl: remito.publicUrl, wa: remito.wa });
-
+  // respuesta
+  res.json({
+    ok: true,
+    id,
+    numero,
+    pdf: remito.pdf,
+    publicUrl: remito.publicUrl,
+    wa: remito.wa
+  });
 });
+
 
 app.get("/remitos", (req, res) => {
   const db = loadDB();
