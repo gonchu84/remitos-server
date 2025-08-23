@@ -14,6 +14,18 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+// === Base pública para armar URLs absolutas (Render) ===
+// Definila en Render → Environment Variables: PUBLIC_BASE_URL=https://remitos-server.onrender.com
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || "http://localhost:4000";
+const abs = (p) => p.startsWith("http") ? p : `${PUBLIC_BASE_URL}${p}`;
+
+// Limpia un teléfono a formato wa.me (solo dígitos, opcional 549…)
+const cleanPhone = (s="") => String(s).replace(/\D+/g,"");
+const waLink = (phone, text) => {
+  const num = cleanPhone(phone); // ej: 54911xxxxxxx
+  const base = num ? `https://wa.me/${num}` : `https://wa.me/`;
+  return `${base}?text=${encodeURIComponent(text)}`;
+};
 
 // ======= CONFIG RUTAS/ARCHIVOS =======
 const DATA_FILE = path.join(__dirname, "data.json");
@@ -376,13 +388,7 @@ app.post("/remitos", (req, res) => {
     status: "pendiente"
   };
 
-  const pdfRel = `/pdf/remito_${numero}.pdf`;
-  const pdfAbs = path.join(PDF_DIR, `remito_${numero}.pdf`);
-  generateRemitoPDF(remito, pdfAbs);
-
-  remito.pdf = pdfRel;
-  const publicAbs = PUBLIC_BASE ? `${PUBLIC_BASE}/r/${id}` : `/r/${id}`;
-  remito.publicUrl = publicAbs;
+const pdfRel = `/pdf/remito_${numero}.pdf`;
 
   if (branchPhone) {
     const msg = `Remito ${numero} (${remito.fecha})%0A${encodeURIComponent(remito.origin)}%20→%20${encodeURIComponent(remito.branch.name)}%0A${encodeURIComponent(publicAbs)}`;
@@ -393,7 +399,8 @@ app.post("/remitos", (req, res) => {
   db.remitos.push(remito);
   saveDB(db);
 
-  res.json({ ok: true, id, numero, pdf: pdfRel, publicUrl: remito.publicUrl, wa: remito.wa || null });
+  res.json({ ok: true, id, numero, pdf: remito.pdf, publicUrl: remito.publicUrl, wa: remito.wa });
+
 });
 
 app.get("/remitos", (req, res) => {
