@@ -530,19 +530,30 @@ app.get("/r/:id", (req, res) => {
     : "https://wa.me/?text=" + encodeURIComponent("Remito " + r.numero);
 
   // Filas de la tabla
+    // Filas de la tabla (incluir códigos para búsquedas)
+    // Filas de la tabla (incluir códigos para búsquedas)
   const rowsHtml = (r.items || []).map((it, i) => {
     const desc = String(it.description || "").replace(/"/g, "&quot;");
-    const qty = parseInt(it.qty, 10) || 0;
-    const rec = parseInt(it.received, 10) || 0;
+    const qty  = parseInt(it.qty, 10) || 0;
+    const rec  = parseInt(it.received, 10) || 0;
+
+    // buscar códigos según descripción
+    const pnorm = s => String(s||"").trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu,'');
+    const prod  = (db.products || []).find(p => pnorm(p.description) === pnorm(it.description));
+    const codes = (prod?.codes || []).join(" ");
+
+    // atributo data-q = desc + codes (plegado) para filtrar rápido
     return (
-      "<tr data-desc=\"" + desc + "\">" +
+      "<tr data-desc=\"" + desc + "\" data-codes=\"" + codes + "\">" +
         "<td>" + (i + 1) + "</td>" +
-        "<td>" + desc + "</td>" +
+        "<td>" + desc + (codes ? ("<div style='color:#64748b;font-size:12px'>" + codes + "</div>") : "") + "</td>" +
         "<td>" + qty + "</td>" +
         "<td id=\"rcv_" + i + "\">" + rec + "</td>" +
       "</tr>"
     );
   }).join("");
+
+
 
   const html =
 "<!doctype html>" +
@@ -635,10 +646,20 @@ app.get("/r/:id", (req, res) => {
 "    const st=document.getElementById('st'); st.textContent=String(j.status||'').toUpperCase(); st.className='pill '+cls(j.status||'pendiente');" +
 "  });" +
 
-"  document.getElementById('find').addEventListener('input', (e)=>{ const q=e.target.value.trim().toLowerCase();" +
-"    Array.from(document.querySelectorAll('#tb tr')).forEach(tr=>{ const desc=(tr.getAttribute('data-desc')||'').toLowerCase();" +
-"      tr.style.display = q ? (desc.includes(q)? '' : 'none') : ''; });" +
+"  function fold(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/\\p{Diacritic}/gu,'').replace(/\\s+/g,' ').trim(); }" +
+"  document.getElementById('find').addEventListener('input', (e)=>{ const fq=fold(e.target.value);" +
+"    const rows = Array.from(document.querySelectorAll('#tb tr'));" +
+"    let first=null;" +
+"    rows.forEach(tr=>{" +
+"      const text = (tr.getAttribute('data-desc')||'') + ' ' + (tr.getAttribute('data-codes')||'');" +
+"      const match = !fq || fold(text).includes(fq);" +
+"      tr.style.display = match ? '' : 'none';" +
+"      if(match && !first) first = tr;" +
+"    });" +
+"    rows.forEach(tr=> tr.style.background='');" +
+"    if(first){ first.style.background='#fffbe6'; first.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(()=>{ if(first) first.style.background=''; },700); }" +
 "  });" +
+
 
 "  async function closeOk(){ const rr=await fetch(BASE + '/remitos/' + RID + '/close', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'ok' }) });" +
 "    if(!rr.ok){ const j=await rr.json().catch(()=>({})); alert(j.error||'No se pudo cerrar en OK'); return; } showMsg('Remito cerrado en OK'); reload(); }" +
