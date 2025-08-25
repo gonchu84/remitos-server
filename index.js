@@ -583,33 +583,27 @@ app.post("/remitos/:id/close", (req, res) => {
 });
 
 // ======= RECEPCIÓN /r/:id (HTML) con búsqueda por códigos =======
+// ======= RECEPCIÓN /r/:id (HTML) con búsqueda por códigos + sugerencias + enter para sumar =======
 app.get("/r/:id", (req, res) => {
   const db = loadDB();
   const id = Number(req.params.id);
   const r = (db.remitos || []).find(x => x.id === id);
   if (!r) return res.status(404).send("Remito inexistente");
 
-  // WhatsApp seguro
-  const waHref = r.wa
-    ? r.wa
-    : "https://wa.me/?text=" + encodeURIComponent("Remito " + r.numero);
+  const fold = s => String(s||"").toLowerCase()
+    .normalize('NFD').replace(/\p{Diacritic}/gu,'')
+    .replace(/\s+/g,' ').trim();
 
-  // Filas de la tabla
-    // Filas de la tabla (incluir códigos para búsquedas)
-    // Filas de la tabla (incluir códigos para búsquedas)
+  // wa seguro
+  const waHref = r.wa ? r.wa : "https://wa.me/?text=" + encodeURIComponent("Remito " + r.numero);
 
-    
+  // filas de tabla (guardamos codes para mostrar debajo)
   const rowsHtml = (r.items || []).map((it, i) => {
     const desc = String(it.description || "").replace(/"/g, "&quot;");
     const qty  = parseInt(it.qty, 10) || 0;
     const rec  = parseInt(it.received, 10) || 0;
-
-    // buscar códigos según descripción
-    const pnorm = s => String(s||"").trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu,'');
-    const prod  = (db.products || []).find(p => pnorm(p.description) === pnorm(it.description));
+    const prod = (db.products || []).find(p => fold(p.description) === fold(it.description));
     const codes = (prod?.codes || []).join(" ");
-
-    // atributo data-q = desc + codes (plegado) para filtrar rápido
     return (
       "<tr data-desc=\"" + desc + "\" data-codes=\"" + codes + "\">" +
         "<td>" + (i + 1) + "</td>" +
@@ -620,18 +614,11 @@ app.get("/r/:id", (req, res) => {
     );
   }).join("");
 
-  // Lista para sugerencias: descripción + códigos del producto
-const fold = s => String(s||"").toLowerCase()
-  .normalize('NFD').replace(/\p{Diacritic}/gu,'')
-  .replace(/\s+/g,' ').trim();
-
-const itemsForJs = (r.items || []).map(it => {
-  const prod = (db.products || []).find(p => fold(p.description) === fold(it.description));
-  return { description: it.description, codes: prod?.codes || [] };
-});
-
-
-
+  // datos para sugerencias
+  const itemsForJs = (r.items || []).map(it => {
+    const prod = (db.products || []).find(p => fold(p.description) === fold(it.description));
+    return { description: it.description, codes: prod?.codes || [] };
+  });
 
   const html =
 "<!doctype html>" +
@@ -656,8 +643,9 @@ const itemsForJs = (r.items || []).map(it => {
 "  .pill.ok{background:#ecfeff}" +
 "  .pill.diff{background:#fff1f2}" +
 "  .pill.pend{background:#fff7ed}" +
-"  .modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:50}" +
-"  .modal{width:min(680px,92vw);background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}" +
+"  .sugg{position:absolute;z-index:20;background:#fff;border:1px solid var(--line);border-radius:10px;max-height:260px;overflow:auto;box-shadow:0 10px 20px rgba(0,0,0,.06)}" +
+"  .sugg div{padding:8px 10px;cursor:pointer;border-top:1px solid #eef2f7}" +
+"  .sugg div:hover{background:#f8fafc}" +
 "</style>" +
 "</head>" +
 "<body>" +
@@ -671,9 +659,12 @@ const itemsForJs = (r.items || []).map(it => {
 "      <div><b>Estado:</b> <span id=\"st\" class=\"pill " + (r.status === "ok" ? "ok" : (r.status === "diferencias" ? "diff" : "pend")) + "\">" + String(r.status || "").toUpperCase() + "</span></div>" +
 "    </div>" +
 
-"    <div class=\"row\" style=\"margin-top:10px; flex-wrap:wrap\">" +
+"    <div class=\"row\" style=\"margin-top:10px; flex-wrap:wrap; position:relative\">" +
 "      <input id=\"scan\" class=\"input\" placeholder=\"Escaneá o pegá un código y Enter\" />" +
-"      <input id=\"find\" class=\"input\" placeholder=\"Buscar por descripción (filtra la tabla)\" />" +
+"      <div style=\"position:relative;flex:1\">" +
+"        <input id=\"find\" class=\"input\" placeholder=\"Buscar por descripción o código (sugerencias y Enter para sumar)\" />" +
+"        <div id=\"sugg\" class=\"sugg\" style=\"display:none;left:0;right:0\"></div>" +
+"      </div>" +
 "      <button class=\"btn secondary\" onclick=\"reload()\">Actualizar</button>" +
 "      <a class=\"btn secondary\" href=\"" + waHref + "\" target=\"_blank\">WhatsApp</a>" +
 "    </div>" +
@@ -705,112 +696,61 @@ const itemsForJs = (r.items || []).map(it => {
 "  const BASE = location.origin.replace(':5173', ':4000');" +
 "  const RID = " + r.id + ";" +
 "  window.__ITEMS = " + JSON.stringify(itemsForJs) + ";" +
-"  const BASE = location.origin.replace(':5173', ':4000');" +
-"  const RID = " + r.id + ";" +
 
 "  function showMsg(t){ const e=document.getElementById('msg'); e.textContent=t; setTimeout(()=>e.textContent='', 2500); }" +
-"  function showErr(id, t){ const e=document.getElementById(id); e.textContent=t; setTimeout(()=>e.textContent='', 2500); }" +
 "  function cls(c){ return c==='ok'?'ok':(c==='diferencias'?'diff':'pend'); }" +
 
 "  async function reload(){ const rr = await fetch(BASE + '/remitos/' + RID); const data = await rr.json();" +
 "    (data.items||[]).forEach((it,i)=>{ const td=document.getElementById('rcv_'+i); if(td) td.textContent=it.received||0; });" +
 "    const st=document.getElementById('st'); st.textContent=String(data.status||'').toUpperCase(); st.className='pill '+cls(data.status||'pendiente'); }" +
 
+"  // === Escaneo por código (igual que antes) ===" +
 "  document.getElementById('scan').addEventListener('keydown', async (e)=>{" +
-"    if (e.key !== 'Enter') return; const t = e.target.value.trim(); if(!t) return; e.target.value=''; document.getElementById('scanErr').textContent='';" +
+"    if (e.key !== 'Enter') return; const t = e.target.value.trim(); if(!t) return; e.target.value='';" +
 "    const rr = await fetch(BASE + '/remitos/' + RID + '/scan', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: t }) });" +
 "    if(!rr.ok){ const j=await rr.json().catch(async()=>({error:await rr.text()}));" +
 "      if(j.reason==='unknown_code'){ alert('Código desconocido. Debe crearse o vincularse en Central/Productos.'); return; }" +
-"      else if(j.reason==='not_in_remito'){ alert('El producto existe, pero no está en este remito.'); return; }" +
-"      else { showErr('scanErr', j.error||'No se pudo registrar'); return; } }" +
+"      if(j.reason==='not_in_remito'){ alert('El producto existe, pero no está en este remito.'); return; }" +
+"      alert(j.error||'No se pudo registrar'); return; }" +
 "    const j = await rr.json(); if (j && j.item){ const td=document.getElementById('rcv_'+j.item.index); if(td) td.textContent=j.item.received; }" +
 "    const st=document.getElementById('st'); st.textContent=String(j.status||'').toUpperCase(); st.className='pill '+cls(j.status||'pendiente');" +
 "  });" +
 
-"  // ==== Sugerencias y Enter para sumar por descripción (estilo Pre-Remito) ====" +
-"  function foldCli(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/\\p{Diacritic}/gu,'').replace(/\\s+/g,' ').trim(); }" +
-"  const SUGG_MAX = 12;" +
-"  const findInput = document.getElementById('find');" +
-"" +
-"  // Dropdown de sugerencias" +
-"  let suggBox = document.createElement('div');" +
-"  suggBox.style.position='absolute';" +
-"  suggBox.style.zIndex='30';" +
-"  suggBox.style.left='16px';" +
-"  suggBox.style.right='16px';" +
-"  suggBox.style.background='#fff';" +
-"  suggBox.style.border='1px solid #e5e7eb';" +
-"  suggBox.style.borderRadius='10px';" +
-"  suggBox.style.marginTop='4px';" +
-"  suggBox.style.boxShadow='0 8px 24px rgba(15,23,42,.08)';" +
-"  suggBox.style.display='none';" +
-"  (function(){ var parent = findInput.parentElement; parent.style.position='relative'; parent.appendChild(suggBox); })();" +
-"" +
-"  function renderSugg(list){ suggBox.innerHTML=''; if(!list || !list.length){ suggBox.style.display='none'; return; }" +
-"    list.slice(0,SUGG_MAX).forEach(it=>{" +
-"      const row = document.createElement('div');" +
-"      row.style.padding='8px 10px'; row.style.cursor='pointer'; row.style.borderTop='1px solid #f2f4f7';" +
-"      row.innerHTML = '<div style=\"font-weight:600\">'+ it.description +'</div>' + (it.codes.length? '<div style=\"color:#64748b;font-size:12px\">'+ it.codes.join(' · ') +'</div>':'' );" +
-"      row.addEventListener('click', ()=>receiveByDesc(it.description));" +
-"      suggBox.appendChild(row);" +
-"    });" +
-"    suggBox.style.display='block';" +
+"  // === Sugerencias y Enter para sumar por descripción ===" +
+"  const FOLD = s => String(s||'').toLowerCase().normalize('NFD').replace(/\\p{Diacritic}/gu,'').replace(/\\s+/g,' ').trim();" +
+"  const S = document.getElementById('sugg');" +
+"  const I = document.getElementById('find');" +
+
+"  function renderSugg(q){ const Q=FOLD(q); if(!Q){ S.style.display='none'; S.innerHTML=''; return; }" +
+"    const list=(window.__ITEMS||[]).filter(it => FOLD(it.description + ' ' + (it.codes||[]).join(' ')).includes(Q)).slice(0,20);" +
+"    if(list.length===0){ S.style.display='none'; S.innerHTML=''; return; }" +
+"    S.innerHTML = list.map(it => (" +
+"      '<div data-desc=\"'+ (it.description||'').replace(/\"/g,'&quot;') +'\">' +" +
+"      '<div style=\"font-weight:600\">'+ it.description +'</div>' +" +
+"      '<div style=\"color:#64748b;font-size:12px\">'+ (it.codes||[]).join(' · ') +'</div>' +" +
+"      '</div>'" +
+"    )).join('');" +
+"    S.style.display='block';" +
+"    Array.from(S.children).forEach(d=> d.onclick = ()=> receiveDesc(d.getAttribute('data-desc')) );" +
 "  }" +
-"" +
-"  async function receiveByDesc(desc){ " +
-"    const rr = await fetch(BASE + '/remitos/' + RID + '/receive-by-desc', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ description: desc }) });" +
-"    if(!rr.ok){ const j=await rr.json().catch(()=>({})); alert(j.error || 'No se pudo registrar'); return; }" +
-"    const j = await rr.json();" +
-"    if (j && j.item){ const td=document.getElementById('rcv_'+j.item.index); if(td) td.textContent=j.item.received; }" +
+
+"  async function receiveDesc(description){ if(!description) return;" +
+"    const rr = await fetch(BASE + '/remitos/' + RID + '/receive-by-desc', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ description }) });" +
+"    if(!rr.ok){ const j=await rr.json().catch(()=>({})); alert(j.error||'No se pudo registrar'); return; }" +
+"    const j = await rr.json(); if(j && j.item){ const td=document.getElementById('rcv_'+j.item.index); if(td) td.textContent=j.item.received; }" +
 "    const st=document.getElementById('st'); st.textContent=String(j.status||'').toUpperCase(); st.className='pill '+cls(j.status||'pendiente');" +
-"    findInput.value=''; suggBox.style.display='none';" +
+"    I.select(); renderSugg(I.value);" +
 "  }" +
-"" +
-"  // Escribir => sugerencias desde los renglones del remito (descripción + códigos)" +
-"  findInput.addEventListener('input', (e)=>{ const q = foldCli(e.target.value); const items = (window.__ITEMS||[]);" +
-"    if(!q){ suggBox.style.display='none'; return; }" +
-"    const candidates = items.filter(it => {" +
-"      const text = foldCli(it.description + ' ' + (it.codes||[]).join(' '));" +
-"      return text.includes(q);" +
-"    });" +
-"    renderSugg(candidates);" +
-"  });" +
-"" +
-"  // Enter: si es código => /scan; si es texto con coincidencias => suma 1 al recibido" +
-"  findInput.addEventListener('keydown', async (e)=>{ if(e.key!=='Enter') return; const t = findInput.value.trim(); if(!t) return;" +
-"    const looksBarcode = /^\\d{6,}$/.test(t.replace(/\\s+/g,''));" +
-"    if(looksBarcode){" +
-"      const rr = await fetch(BASE + '/remitos/' + RID + '/scan', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: t }) });" +
-"      findInput.value=''; suggBox.style.display='none';" +
-"      if(!rr.ok){ const j=await rr.json().catch(async()=>({error:await rr.text()}));" +
-"        if(j.reason==='unknown_code'){ alert('Código desconocido. Crealo/vinculalo en Central → Productos.'); return; }" +
-"        else if(j.reason==='not_in_remito'){ alert('El producto existe, pero no está en este remito.'); return; }" +
-"        else { showErr('scanErr', j.error||'No se pudo registrar'); return; } }" +
-"      const j = await rr.json(); if (j && j.item){ const td=document.getElementById('rcv_'+j.item.index); if(td) td.textContent=j.item.received; }" +
-"      const st=document.getElementById('st'); st.textContent=String(j.status||'').toUpperCase(); st.className='pill '+cls(j.status||'pendiente');" +
-"      return;" +
-"    }" +
-"    const items = (window.__ITEMS||[]);" +
-"    const q = foldCli(t);" +
-"    const candidates = items.filter(it => {" +
-"      const text = foldCli(it.description + ' ' + (it.codes||[]).join(' '));" +
-"      return text.includes(q);" +
-"    });" +
-"    if(candidates.length){ await receiveByDesc(candidates[0].description); }" +
-"  });" +
 
-"  async function closeOk(){ const rr=await fetch(BASE + '/remitos/' + RID + '/close', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'ok' }) });" +
-"    if(!rr.ok){ const j=await rr.json().catch(()=>({})); alert(j.error||'No se pudo cerrar en OK'); return; } showMsg('Remito cerrado en OK'); reload(); }" +
-
-"  async function sendDiff(){ const note = prompt('Describí las diferencias:','');" +
-"    const rr = await fetch(BASE + '/remitos/' + RID + '/close', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'diferencias', note }) });" +
-"    if(!rr.ok){ alert('No se pudo enviar diferencias'); return; } showMsg('Diferencias enviadas'); reload(); }" +
+"  I.addEventListener('input', e=> renderSugg(e.target.value) );" +
+"  I.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const first=S.querySelector('div[data-desc]'); if(first){ receiveDesc(first.getAttribute('data-desc')); e.preventDefault(); } } });" +
 "</script>" +
 "</body></html>";
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(html);
 });
+
 
 
 // ======= PDF =======
