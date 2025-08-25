@@ -1,4 +1,4 @@
-// server/index.js  (ESM)
+/* server/index.js (ESM, limpio) */
 import express from "express";
 import cors from "cors";
 import fs from "fs";
@@ -14,35 +14,37 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-// === Base pública para armar URLs absolutas (Render) ===
-// Definila en Render → Environment Variables: PUBLIC_BASE_URL=https://remitos-server.onrender.com
-const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || "http://localhost:4000";
-const abs = (p) => p.startsWith("http") ? p : `${PUBLIC_BASE_URL}${p}`;
 
-// Limpia un teléfono a formato wa.me (solo dígitos, opcional 549…)
-const cleanPhone = (s="") => String(s).replace(/\D+/g,"");
+/* === URL pública para armar links absolutos (Render) ===
+   Configurá en Render > Environment > Environment Variables:
+   PUBLIC_BASE_URL = https://remitos-server.onrender.com
+*/
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || "http://localhost:4000";
+const abs = (p) => (String(p).startsWith("http") ? p : `${PUBLIC_BASE_URL}${p}`);
+
+/* ==== Teléfono / WhatsApp ==== */
+const cleanPhone = (s = "") => String(s).replace(/\D+/g, "");
 const waLink = (phone, text) => {
-  const num = cleanPhone(phone); // ej: 54911xxxxxxx
+  const num = cleanPhone(phone); // ej 54911xxxxxxxx
   const base = num ? `https://wa.me/${num}` : `https://wa.me/`;
   return `${base}?text=${encodeURIComponent(text)}`;
 };
 
-// ======= CONFIG RUTAS/ARCHIVOS =======
+/* ==== Archivos ==== */
 const DATA_FILE = path.join(__dirname, "data.json");
 const PDF_DIR = path.join(__dirname, "pdf");
 const UP_DIR = path.join(__dirname, "uploads");
-const PUBLIC_BASE = process.env.PUBLIC_BASE || ""; // ej: https://remitos-server.onrender.com
 
-// ======= UTILS DB =======
+fsExtra.ensureDirSync(PDF_DIR);
+fsExtra.ensureDirSync(UP_DIR);
+
+/* ==== Mini “DB” JSON ==== */
 function loadDB() {
   if (!fs.existsSync(DATA_FILE)) {
     return { branches: [], products: [], remitos: [], counters: { remito: 3804 } };
   }
-  try {
-    return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-  } catch {
-    return { branches: [], products: [], remitos: [], counters: { remito: 3804 } };
-  }
+  try { return JSON.parse(fs.readFileSync(DATA_FILE, "utf8")); }
+  catch { return { branches: [], products: [], remitos: [], counters: { remito: 3804 } }; }
 }
 function saveDB(db) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2), "utf8");
@@ -54,21 +56,24 @@ function nextRemitoNumber(db) {
   return db.counters.remito;
 }
 const norm = (s) => String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
+const fold = (s) => String(s || "")
+  .toLowerCase()
+  .normalize("NFD")
+  .replace(/\p{Diacritic}/gu, "")
+  .replace(/\s+/g, " ")
+  .trim();
 const looksCode = (s) => /^\d{6,}$/.test(String(s || "").replace(/\s+/g, ""));
 
-// ======= APP SETUP =======
+/* ==== App ==== */
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({ origin: ["http://localhost:5173", /\.vercel\.app$/, /\.onrender\.com$/], credentials: false }));
 
-fsExtra.ensureDirSync(PDF_DIR);
-fsExtra.ensureDirSync(UP_DIR);
-
-// Servir PDFs y uploads
+/* Archivos estáticos PDF y uploads */
 app.use("/pdf", express.static(PDF_DIR));
 app.use("/uploads", express.static(UP_DIR));
 
-// ======= SEED SUCURSALES =======
+/* =================== SEED SUCURSALES =================== */
 app.get("/seed", (req, res) => {
   const db = loadDB();
   if (db.branches && db.branches.length > 0) return res.send("Seed ya ejecutado.");
@@ -88,7 +93,7 @@ app.get("/seed", (req, res) => {
   res.send("OK: sucursales creadas.");
 });
 
-// ======= SUCURSALES =======
+/* =================== SUCURSALES =================== */
 app.get("/branches", (req, res) => {
   const db = loadDB();
   res.json(db.branches || []);
@@ -128,11 +133,13 @@ app.post("/branches/:id/delete", (req, res) => {
   res.json({ ok: true, removed: before - after });
 });
 
-// ======= PRODUCTOS =======
+/* =================== PRODUCTOS =================== */
 app.get("/products", (req, res) => {
   const db = loadDB();
   const q = String(req.query.q || "").trim();
-  if (!q) return res.json((db.products || []).map(p => ({ id: p.id, description: p.description, codes: p.codes || [] })));
+  if (!q) {
+    return res.json((db.products || []).map(p => ({ id: p.id, description: p.description, codes: p.codes || [] })));
+  }
   const qn = norm(q);
   const list = (db.products || []).filter(p => {
     const inDesc = norm(p.description).includes(qn);
@@ -141,6 +148,7 @@ app.get("/products", (req, res) => {
   }).map(p => ({ id: p.id, description: p.description, codes: p.codes || [] }));
   res.json(list);
 });
+
 app.get("/products/by-code/:code", (req, res) => {
   const db = loadDB();
   const code = String(req.params.code || "").trim();
@@ -148,6 +156,7 @@ app.get("/products/by-code/:code", (req, res) => {
   if (!product) return res.status(404).json({ error: "Código no encontrado", reason: "unknown_code" });
   res.json({ product: { id: product.id, description: product.description, codes: product.codes || [] } });
 });
+
 app.post("/products", (req, res) => {
   const db = loadDB();
   const description = String(req.body.description || "").trim();
@@ -165,6 +174,7 @@ app.post("/products", (req, res) => {
   saveDB(db);
   res.json({ ok: true, id });
 });
+
 app.post("/products/:id/update", (req, res) => {
   const db = loadDB();
   const id = Number(req.params.id);
@@ -176,6 +186,7 @@ app.post("/products/:id/update", (req, res) => {
   saveDB(db);
   res.json({ ok: true });
 });
+
 app.post("/products/:id/addCode", (req, res) => {
   const db = loadDB();
   const id = Number(req.params.id);
@@ -191,6 +202,7 @@ app.post("/products/:id/addCode", (req, res) => {
   saveDB(db);
   res.json({ ok: true, codes: p.codes });
 });
+
 app.post("/products/:id/removeCode", (req, res) => {
   const db = loadDB();
   const id = Number(req.params.id);
@@ -201,6 +213,7 @@ app.post("/products/:id/removeCode", (req, res) => {
   saveDB(db);
   res.json({ ok: true, codes: p.codes });
 });
+
 app.post("/products/:id/delete", (req, res) => {
   const db = loadDB();
   const id = Number(req.params.id);
@@ -211,12 +224,12 @@ app.post("/products/:id/delete", (req, res) => {
   res.json({ ok: true, removed: before - after });
 });
 
-// ======= ADMIN IMPORT XLSX =======
+/* =================== ADMIN XLSX =================== */
 const upload = multer({ dest: UP_DIR });
 
 app.get("/admin/products-xlsx", (req, res) => {
   const msg = req.query.msg ? decodeURIComponent(req.query.msg) : "";
-  res.send(`
+  res.send(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Importar productos (.xlsx)</title>
 <style>
 body{font-family:system-ui;padding:20px}
@@ -252,15 +265,15 @@ app.post("/admin/products-xlsx", upload.single("file"), async (req, res) => {
     const ws = wb.Sheets[wb.SheetNames[0]];
     if (!ws) throw new Error("La primera hoja del Excel está vacía");
     const rows = xlsx.utils.sheet_to_json(ws, { header: 1, raw: true });
-    const db = loadDB();
-    db.products = db.products || [];
+
+    const db = loadDB(); db.products = db.products || [];
     const first = rows[0] || [];
     const looksHeader =
       (String(first[0] || "").toLowerCase().includes("cod") || isNaN(Number(first[0]))) &&
       (String(first[3] || "").toLowerCase().includes("desc") || typeof first[3] === "string");
     let start = 0; if (looksHeader) { summary.headerSkipped = true; start = 1; }
 
-    const pnorm = (s) => String(s||"").trim().replace(/\s+/g," ").toLowerCase();
+    const pnorm = (s) => fold(s);
     for (let i = start; i < rows.length; i++) {
       const row = rows[i] || [];
       summary.totalRows++;
@@ -270,6 +283,7 @@ app.post("/admin/products-xlsx", upload.single("file"), async (req, res) => {
       const desc = String(row[3] ?? "").trim();
       if (!desc && !c1 && !c2 && !c3) continue;
       if (!desc) { summary.invalidRows++; continue; }
+
       let p = db.products.find(x => pnorm(x.description) === pnorm(desc));
       if (!p) {
         const id = (db.products.reduce((m, x) => Math.max(m, x.id), 0) || 0) + 1;
@@ -278,12 +292,11 @@ app.post("/admin/products-xlsx", upload.single("file"), async (req, res) => {
         summary.created++;
       }
       p.codes = p.codes || [];
-      const candidateCodes = [c1, c2, c3].filter(Boolean);
-      for (const code of candidateCodes) {
+      for (const code of [c1, c2, c3].filter(Boolean)) {
         const dupInOthers = db.products.some(x => x !== p && (x.codes || []).includes(code));
         if (dupInOthers) { summary.duplicatesSkipped++; continue; }
-        if (!p.codes.includes(code)) {
-          if (p.codes.length < 3) { p.codes.push(code); summary.codesAdded++; }
+        if (!p.codes.includes(code) && p.codes.length < 3) {
+          p.codes.push(code); summary.codesAdded++;
         }
       }
     }
@@ -305,7 +318,6 @@ app.post("/admin/products-xlsx", upload.single("file"), async (req, res) => {
   }
 });
 
-// Endpoint JSON para importar desde el frontend (input file en UI)
 app.post("/admin/products-xlsx-json", upload.single("file"), async (req, res) => {
   const filePath = req.file?.path;
   if (!filePath) return res.status(400).json({ ok:false, error:"Archivo requerido" });
@@ -315,13 +327,14 @@ app.post("/admin/products-xlsx-json", upload.single("file"), async (req, res) =>
     const ws = wb.Sheets[wb.SheetNames[0]];
     if (!ws) throw new Error("La primera hoja del Excel está vacía");
     const rows = xlsx.utils.sheet_to_json(ws, { header: 1, raw: true });
+
     const db = loadDB(); db.products = db.products || [];
     const first = rows[0] || [];
     const looksHeader =
       (String(first[0] || "").toLowerCase().includes("cod") || isNaN(Number(first[0]))) &&
       (String(first[3] || "").toLowerCase().includes("desc") || typeof first[3] === "string");
     let start = 0; if (looksHeader) { summary.headerSkipped = true; start = 1; }
-    const pnorm = (s) => String(s||"").trim().replace(/\s+/g," ").toLowerCase();
+    const pnorm = (s) => fold(s);
 
     for (let i = start; i < rows.length; i++) {
       const row = rows[i] || [];
@@ -332,6 +345,7 @@ app.post("/admin/products-xlsx-json", upload.single("file"), async (req, res) =>
       const desc = String(row[3] ?? "").trim();
       if (!desc && !c1 && !c2 && !c3) continue;
       if (!desc) { summary.invalidRows++; continue; }
+
       let p = db.products.find(x => pnorm(x.description) === pnorm(desc));
       if (!p) {
         const id = (db.products.reduce((m, x) => Math.max(m, x.id), 0) || 0) + 1;
@@ -340,12 +354,11 @@ app.post("/admin/products-xlsx-json", upload.single("file"), async (req, res) =>
         summary.created++;
       }
       p.codes = p.codes || [];
-      const candidateCodes = [c1, c2, c3].filter(Boolean);
-      for (const code of candidateCodes) {
+      for (const code of [c1, c2, c3].filter(Boolean)) {
         const dupInOthers = db.products.some(x => x !== p && (x.codes || []).includes(code));
         if (dupInOthers) { summary.duplicatesSkipped++; continue; }
-        if (!p.codes.includes(code)) {
-          if (p.codes.length < 3) { p.codes.push(code); summary.codesAdded++; }
+        if (!p.codes.includes(code) && p.codes.length < 3) {
+          p.codes.push(code); summary.codesAdded++;
         }
       }
     }
@@ -359,401 +372,7 @@ app.post("/admin/products-xlsx-json", upload.single("file"), async (req, res) =>
   }
 });
 
-// ======= REMITOS =======
-// ======= REMITOS =======
-app.post("/remitos", (req, res) => {
-  const db = loadDB();
-  const { branch, origin, date, items } = req.body || {};
-
-  if (!branch?.id) return res.status(400).json({ error: "branch requerido" });
-  if (!Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: "items vacío" });
-  }
-
-  // buscar sucursal completa (para el phone limpio)
-  const fullBranch = (db.branches || []).find(b => b.id === Number(branch.id));
-  const branchPhone = (fullBranch?.phone || "").replace(/\D+/g, "");
-
-  // numeración e id
-  const numero = nextRemitoNumber(db);
-  const id = (db.remitos?.reduce((m, r) => Math.max(m, r.id), 0) || 0) + 1;
-
-  // normalizar items
-  const normItems = items.map(x => ({
-    description: String(x.description || "").trim(),
-    qty: parseInt(x.qty, 10) || 0,
-    received: 0
-  }));
-
-  // armar objeto remito (aún sin pdf/publicUrl)
-  const remito = {
-    id,
-    numero,
-    fecha: date || new Date().toISOString().slice(0, 10),
-    origin: String(origin || "Juan Manuel de Rosas 1325"),
-    branch: {
-      id: branch.id,
-      name: branch.name,
-      address: branch.address || "",
-      phone: branchPhone
-    },
-    items: normItems,
-    status: "pendiente"
-  };
-
-  // ===== PDF =====
-  const pdfRel = `/pdf/remito_${numero}.pdf`;
-  const pdfAbs = path.join(PDF_DIR, `remito_${numero}.pdf`);
-  try {
-    generateRemitoPDF(remito, pdfAbs);
-  } catch (e) {
-    console.error("Error generando PDF:", e);
-    return res.status(500).json({ error: "No se pudo generar el PDF" });
-  }
-
-  // ===== URL pública de recepción =====
-  const publicRel = `/r/${id}`;
-
-  // ===== WhatsApp (si hay teléfono) =====
-  // armamos un texto prolijo y lo pasamos por waLink (ya limpia y hace encode)
-  let wa = null;
-  if (branchPhone) {
-    const text = [
-      `Remito ${numero} (${remito.fecha})`,
-      `${remito.origin} → ${remito.branch.name}`,
-      abs(publicRel) // absoluto para que abran directo
-    ].join("\n");
-    wa = waLink(branchPhone, text);
-  }
-
-  // guardar en remito
-  remito.pdf = pdfRel;          // relativo (el front hace `${API}${r.pdf}`)
-  remito.publicUrl = publicRel; // relativo
-  remito.wa = wa || null;
-
-  // persistir
-  db.remitos = db.remitos || [];
-  db.remitos.push(remito);
-  saveDB(db);
-
-  // respuesta
-  res.json({
-    ok: true,
-    id,
-    numero,
-    pdf: remito.pdf,
-    publicUrl: remito.publicUrl,
-    wa: remito.wa
-  });
-});
-
-
-app.get("/remitos", (req, res) => {
-  const db = loadDB();
-  const list = (db.remitos || []).map(r => ({
-    id: r.id,
-    numero: r.numero,
-    fecha: r.fecha,
-    branch: r.branch,
-    origin: r.origin,
-    pdf: r.pdf,
-    publicUrl: r.publicUrl,
-    wa: r.wa || null,
-    status: r.status
-  }));
-  list.sort((a,b)=> b.id - a.id);
-  res.json(list);
-});
-app.get("/remitos/:id", (req, res) => {
-  const db = loadDB();
-  const id = Number(req.params.id);
-  const r = (db.remitos || []).find(x => x.id === id);
-  if (!r) return res.status(404).json({ error: "No existe" });
-  res.json(r);
-});
-app.post("/remitos/:id/scan", (req, res) => {
-  const db = loadDB();
-  const id = Number(req.params.id);
-  const code = String(req.body.code || "").trim();
-  const remito = (db.remitos || []).find(x => x.id === id);
-  if (!remito) return res.status(404).json({ error: "No existe" });
-  if (!code) return res.status(400).json({ error: "Código requerido" });
-
-  const prod = (db.products || []).find(p => (p.codes || []).includes(code));
-  if (!prod) {
-    return res.status(404).json({ error: "Código no encontrado", reason: "unknown_code" });
-  }
-  const idx = remito.items.findIndex(it => norm(it.description) === norm(prod.description));
-  if (idx === -1) {
-    return res.status(400).json({ error: "Producto no figura en el remito", reason: "not_in_remito" });
-  }
-  const it = remito.items[idx];
-  it.received = Math.min(it.qty, (parseInt(it.received,10) || 0) + 1);
-
-  const allOk = remito.items.every(x => (parseInt(x.received,10)||0) === (parseInt(x.qty,10)||0));
-  const anyOver = remito.items.some(x => (parseInt(x.received,10)||0) > (parseInt(x.qty,10)||0));
-  const anyDiff = remito.items.some(x => (parseInt(x.received,10)||0) !== (parseInt(x.qty,10)||0));
-  remito.status = allOk && !anyOver ? "ok" : (anyDiff ? "diferencias" : "pendiente");
-
-  saveDB(db);
-  res.json({ ok: true, item: { index: idx, description: it.description, qty: it.qty, received: it.received }, status: remito.status });
-});
-/** POST /remitos/:id/receive-by-desc  { description } 
- *  Incrementa 1 el recibido del ítem cuyo description matchee (normalizado).
- */
-app.post("/remitos/:id/receive-by-desc", (req, res) => {
-  const db = loadDB();
-  const id = Number(req.params.id);
-  const remito = (db.remitos || []).find(x => x.id === id);
-  if (!remito) return res.status(404).json({ error: "No existe" });
-
-  const description = String(req.body.description || "").trim();
-  if (!description) return res.status(400).json({ error: "Descripción requerida" });
-
-  // match normalizado (como en /scan)
-  const idx = remito.items.findIndex(it => norm(it.description) === norm(description));
-  if (idx === -1) {
-    return res.status(404).json({ error: "No figura en el remito", reason: "not_in_remito" });
-  }
-
-  const it = remito.items[idx];
-  it.received = Math.min(it.qty, (parseInt(it.received,10) || 0) + 1);
-
-  const allOk  = remito.items.every(x => (parseInt(x.received,10)||0) === (parseInt(x.qty,10)||0));
-  const anyOver= remito.items.some (x => (parseInt(x.received,10)||0) >  (parseInt(x.qty,10)||0));
-  const anyDiff= remito.items.some (x => (parseInt(x.received,10)||0) !== (parseInt(x.qty,10)||0));
-  remito.status = allOk && !anyOver ? "ok" : (anyDiff ? "diferencias" : "pendiente");
-
-  saveDB(db);
-  res.json({
-    ok: true,
-    item: { index: idx, description: it.description, qty: it.qty, received: it.received },
-    status: remito.status
-  });
-});
-
-// Sumar 1 al recibido buscando por descripción (folded)
-app.post("/remitos/:id/receive-by-desc", (req, res) => {
-  const db = loadDB();
-  const id = Number(req.params.id);
-  const { description } = req.body || {};
-  const remito = (db.remitos || []).find(x => x.id === id);
-  if (!remito) return res.status(404).json({ error: "No existe" });
-
-  const fold = s => String(s||"").toLowerCase()
-    .normalize('NFD').replace(/\p{Diacritic}/gu,'')
-    .replace(/\s+/g,' ').trim();
-
-  const q = fold(description||"");
-  if(!q) return res.status(400).json({ error: "Descripción requerida" });
-
-  const idx = remito.items.findIndex(it => fold(it.description).includes(q));
-  if (idx === -1) return res.status(404).json({ error:"No se encontró ese renglón" });
-
-  const it = remito.items[idx];
-  it.received = Math.min(it.qty, (parseInt(it.received,10)||0) + 1);
-
-  const allOk  = remito.items.every(x => (x.received|0) === (x.qty|0));
-  const anyOver= remito.items.some(x => (x.received|0) >  (x.qty|0));
-  const anyDiff= remito.items.some(x => (x.received|0) !== (x.qty|0));
-  remito.status = allOk && !anyOver ? "ok" : (anyDiff ? "diferencias" : "pendiente");
-
-  saveDB(db);
-  res.json({ ok:true, item:{ index:idx, description:it.description, qty:it.qty, received:it.received }, status: remito.status });
-});
-
-
-app.post("/remitos/:id/close", (req, res) => {
-  const db = loadDB();
-  const id = Number(req.params.id);
-  const { action, note } = req.body || {};
-  const remito = (db.remitos || []).find(x => x.id === id);
-  if (!remito) return res.status(404).json({ error: "No existe" });
-
-  if (action === "ok") {
-    const allOk = remito.items.every(x => (parseInt(x.received,10)||0) === (parseInt(x.qty,10)||0));
-    if (!allOk) return res.status(400).json({ error: "No coincide todo; hay diferencias" });
-    remito.status = "ok";
-  } else if (action === "diferencias") {
-    remito.status = "diferencias";
-    remito.note = String(note || "");
-  }
-  saveDB(db);
-  res.json({ ok: true, status: remito.status });
-});
-
-// ======= RECEPCIÓN /r/:id (HTML) con búsqueda por códigos =======
-// ======= RECEPCIÓN /r/:id (HTML) con búsqueda por códigos + sugerencias + enter para sumar =======
-app.get("/r/:id", (req, res) => {
-  const db = loadDB();
-  const id = Number(req.params.id);
-  const r = (db.remitos || []).find(x => x.id === id);
-  if (!r) return res.status(404).send("Remito inexistente");
-
-  const fold = s => String(s||"").toLowerCase()
-    .normalize('NFD').replace(/\p{Diacritic}/gu,'')
-    .replace(/\s+/g,' ').trim();
-
-  // wa seguro
-  const waHref = r.wa ? r.wa : "https://wa.me/?text=" + encodeURIComponent("Remito " + r.numero);
-
-  // filas de tabla (guardamos codes para mostrar debajo)
-  const rowsHtml = (r.items || []).map((it, i) => {
-    const desc = String(it.description || "").replace(/"/g, "&quot;");
-    const qty  = parseInt(it.qty, 10) || 0;
-    const rec  = parseInt(it.received, 10) || 0;
-    const prod = (db.products || []).find(p => fold(p.description) === fold(it.description));
-    const codes = (prod?.codes || []).join(" ");
-    return (
-      "<tr data-desc=\"" + desc + "\" data-codes=\"" + codes + "\">" +
-        "<td>" + (i + 1) + "</td>" +
-        "<td>" + desc + (codes ? ("<div style='color:#64748b;font-size:12px'>" + codes + "</div>") : "") + "</td>" +
-        "<td>" + qty + "</td>" +
-        "<td id=\"rcv_" + i + "\">" + rec + "</td>" +
-      "</tr>"
-    );
-  }).join("");
-
-  // datos para sugerencias
-  const itemsForJs = (r.items || []).map(it => {
-    const prod = (db.products || []).find(p => fold(p.description) === fold(it.description));
-    return { description: it.description, codes: prod?.codes || [] };
-  });
-
-  const html =
-"<!doctype html>" +
-"<html lang=\"es\">" +
-"<head>" +
-"<meta charset=\"utf-8\"/>" +
-"<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>" +
-"<title>Recepción de Remito " + r.numero + "</title>" +
-"<style>" +
-"  :root{ --line:#e2e8f0; --muted:#64748b; --primary:#0ea5e9; }" +
-"  body{font-family:system-ui;margin:0;background:#f6faff;color:#0f172a}" +
-"  .wrap{max-width:900px;margin:0 auto;padding:16px}" +
-"  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}" +
-"  .row{display:flex;gap:10px;align-items:center}" +
-"  .input{padding:10px;border:1px solid var(--line);border-radius:10px;width:100%}" +
-"  .btn{padding:10px 14px;border-radius:10px;border:1px solid var(--primary);background:var(--primary);color:#fff;cursor:pointer;text-decoration:none;display:inline-block}" +
-"  .btn.secondary{background:#fff;color:var(--primary)}" +
-"  table{border-collapse:collapse;width:100%}" +
-"  td,th{border-top:1px solid var(--line);padding:8px}" +
-"  thead th{background:#f1f5f9}" +
-"  .pill{padding:4px 8px;border:1px solid var(--line);border-radius:999px;font-size:12px}" +
-"  .pill.ok{background:#ecfeff}" +
-"  .pill.diff{background:#fff1f2}" +
-"  .pill.pend{background:#fff7ed}" +
-"  .sugg{position:absolute;z-index:20;background:#fff;border:1px solid var(--line);border-radius:10px;max-height:260px;overflow:auto;box-shadow:0 10px 20px rgba(0,0,0,.06)}" +
-"  .sugg div{padding:8px 10px;cursor:pointer;border-top:1px solid #eef2f7}" +
-"  .sugg div:hover{background:#f8fafc}" +
-"</style>" +
-"</head>" +
-"<body>" +
-"<div class=\"wrap\">" +
-"  <h2>Recepción — Remito " + r.numero + "</h2>" +
-"  <div class=\"card\">" +
-"    <div class=\"row\" style=\"flex-wrap:wrap\">" +
-"      <div><b>Fecha:</b> " + r.fecha + "</div>" +
-"      <div><b>Origen:</b> " + r.origin + "</div>" +
-"      <div><b>Destino:</b> " + (r.branch && r.branch.name ? r.branch.name : "") + "</div>" +
-"      <div><b>Estado:</b> <span id=\"st\" class=\"pill " + (r.status === "ok" ? "ok" : (r.status === "diferencias" ? "diff" : "pend")) + "\">" + String(r.status || "").toUpperCase() + "</span></div>" +
-"    </div>" +
-
-"    <div class=\"row\" style=\"margin-top:10px; flex-wrap:wrap; position:relative\">" +
-"      <input id=\"scan\" class=\"input\" placeholder=\"Escaneá o pegá un código y Enter\" />" +
-"      <div style=\"position:relative;flex:1\">" +
-"        <input id=\"find\" class=\"input\" placeholder=\"Buscar por descripción o código (sugerencias y Enter para sumar)\" />" +
-"        <div id=\"sugg\" class=\"sugg\" style=\"display:none;left:0;right:0\"></div>" +
-"      </div>" +
-"      <button class=\"btn secondary\" onclick=\"reload()\">Actualizar</button>" +
-"      <a class=\"btn secondary\" href=\"" + waHref + "\" target=\"_blank\">WhatsApp</a>" +
-"    </div>" +
-
-"    <div style=\"margin-top:12px\">" +
-"      <table>" +
-"        <thead><tr><th>#</th><th>Descripción</th><th>Enviado</th><th>Recibido</th></tr></thead>" +
-"        <tbody id=\"tb\">" +
-            rowsHtml +
-"        </tbody>" +
-"      </table>" +
-"    </div>" +
-
-"    <div class=\"row\" style=\"margin-top:12px\">" +
-"      <button class=\"btn\" onclick=\"closeOk()\">OK Final</button>" +
-"      <button class=\"btn secondary\" onclick=\"sendDiff()\">Enviar diferencias</button>" +
-"      <div id=\"msg\" style=\"margin-left:auto;color:#059669\"></div>" +
-"    </div>" +
-"    <div id=\"scanErr\" style=\"color:#b91c1c;margin-top:8px\"></div>" +
-"  </div>" +
-
-"  <div class=\"card\" style=\"margin-top:12px\">" +
-"    <div><b>PDF:</b> <a href=\"" + r.pdf + "\" target=\"_blank\">" + r.pdf + "</a></div>" +
-"    <iframe title=\"PDF\" src=\"" + r.pdf + "\" style=\"width:100%;height:520px;border:1px solid var(--line);border-radius:10px;margin-top:6px\"></iframe>" +
-"  </div>" +
-"</div>" +
-
-"<script>" +
-"  const BASE = location.origin.replace(':5173', ':4000');" +
-"  const RID = " + r.id + ";" +
-"  window.__ITEMS = " + JSON.stringify(itemsForJs) + ";" +
-
-"  function showMsg(t){ const e=document.getElementById('msg'); e.textContent=t; setTimeout(()=>e.textContent='', 2500); }" +
-"  function cls(c){ return c==='ok'?'ok':(c==='diferencias'?'diff':'pend'); }" +
-
-"  async function reload(){ const rr = await fetch(BASE + '/remitos/' + RID); const data = await rr.json();" +
-"    (data.items||[]).forEach((it,i)=>{ const td=document.getElementById('rcv_'+i); if(td) td.textContent=it.received||0; });" +
-"    const st=document.getElementById('st'); st.textContent=String(data.status||'').toUpperCase(); st.className='pill '+cls(data.status||'pendiente'); }" +
-
-"  // === Escaneo por código (igual que antes) ===" +
-"  document.getElementById('scan').addEventListener('keydown', async (e)=>{" +
-"    if (e.key !== 'Enter') return; const t = e.target.value.trim(); if(!t) return; e.target.value='';" +
-"    const rr = await fetch(BASE + '/remitos/' + RID + '/scan', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: t }) });" +
-"    if(!rr.ok){ const j=await rr.json().catch(async()=>({error:await rr.text()}));" +
-"      if(j.reason==='unknown_code'){ alert('Código desconocido. Debe crearse o vincularse en Central/Productos.'); return; }" +
-"      if(j.reason==='not_in_remito'){ alert('El producto existe, pero no está en este remito.'); return; }" +
-"      alert(j.error||'No se pudo registrar'); return; }" +
-"    const j = await rr.json(); if (j && j.item){ const td=document.getElementById('rcv_'+j.item.index); if(td) td.textContent=j.item.received; }" +
-"    const st=document.getElementById('st'); st.textContent=String(j.status||'').toUpperCase(); st.className='pill '+cls(j.status||'pendiente');" +
-"  });" +
-
-"  // === Sugerencias y Enter para sumar por descripción ===" +
-"  const FOLD = s => String(s||'').toLowerCase().normalize('NFD').replace(/\\p{Diacritic}/gu,'').replace(/\\s+/g,' ').trim();" +
-"  const S = document.getElementById('sugg');" +
-"  const I = document.getElementById('find');" +
-
-"  function renderSugg(q){ const Q=FOLD(q); if(!Q){ S.style.display='none'; S.innerHTML=''; return; }" +
-"    const list=(window.__ITEMS||[]).filter(it => FOLD(it.description + ' ' + (it.codes||[]).join(' ')).includes(Q)).slice(0,20);" +
-"    if(list.length===0){ S.style.display='none'; S.innerHTML=''; return; }" +
-"    S.innerHTML = list.map(it => (" +
-"      '<div data-desc=\"'+ (it.description||'').replace(/\"/g,'&quot;') +'\">' +" +
-"      '<div style=\"font-weight:600\">'+ it.description +'</div>' +" +
-"      '<div style=\"color:#64748b;font-size:12px\">'+ (it.codes||[]).join(' · ') +'</div>' +" +
-"      '</div>'" +
-"    )).join('');" +
-"    S.style.display='block';" +
-"    Array.from(S.children).forEach(d=> d.onclick = ()=> receiveDesc(d.getAttribute('data-desc')) );" +
-"  }" +
-
-"  async function receiveDesc(description){ if(!description) return;" +
-"    const rr = await fetch(BASE + '/remitos/' + RID + '/receive-by-desc', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ description }) });" +
-"    if(!rr.ok){ const j=await rr.json().catch(()=>({})); alert(j.error||'No se pudo registrar'); return; }" +
-"    const j = await rr.json(); if(j && j.item){ const td=document.getElementById('rcv_'+j.item.index); if(td) td.textContent=j.item.received; }" +
-"    const st=document.getElementById('st'); st.textContent=String(j.status||'').toUpperCase(); st.className='pill '+cls(j.status||'pendiente');" +
-"    I.select(); renderSugg(I.value);" +
-"  }" +
-
-"  I.addEventListener('input', e=> renderSugg(e.target.value) );" +
-"  I.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const first=S.querySelector('div[data-desc]'); if(first){ receiveDesc(first.getAttribute('data-desc')); e.preventDefault(); } } });" +
-"</script>" +
-"</body></html>";
-
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(html);
-});
-
-
-
-// ======= PDF =======
+/* =================== REMITOS =================== */
 function generateRemitoPDF(remito, outPath) {
   const doc = new PDFDocument({ size: "A4", margin: 36 });
   const stream = fs.createWriteStream(outPath);
@@ -800,7 +419,366 @@ function generateRemitoPDF(remito, outPath) {
   doc.end();
 }
 
-// ======= START =======
+app.post("/remitos", (req, res) => {
+  const db = loadDB();
+  const { branch, origin, date, items } = req.body || {};
+  if (!branch?.id) return res.status(400).json({ error: "branch requerido" });
+  if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: "items vacío" });
+
+  const fullBranch = (db.branches || []).find(b => b.id === Number(branch.id));
+  const branchPhone = (fullBranch?.phone || "").replace(/\D+/g, "");
+
+  const numero = nextRemitoNumber(db);
+  const id = (db.remitos?.reduce((m, r) => Math.max(m, r.id), 0) || 0) + 1;
+
+  const normItems = items.map(x => ({
+    description: String(x.description || "").trim(),
+    qty: parseInt(x.qty, 10) || 0,
+    received: 0
+  }));
+
+  const remito = {
+    id,
+    numero,
+    fecha: date || new Date().toISOString().slice(0, 10),
+    origin: String(origin || "Juan Manuel de Rosas 1325"),
+    branch: { id: branch.id, name: branch.name, address: branch.address || "", phone: branchPhone },
+    items: normItems,
+    status: "pendiente"
+  };
+
+  // PDF
+  const pdfRel = `/pdf/remito_${numero}.pdf`;
+  const pdfAbs = path.join(PDF_DIR, `remito_${numero}.pdf`);
+  try { generateRemitoPDF(remito, pdfAbs); }
+  catch (e) { console.error("Error generando PDF:", e); return res.status(500).json({ error: "No se pudo generar el PDF" }); }
+
+  // Link público
+  const publicRel = `/r/${id}`;
+
+  // WhatsApp
+  let wa = null;
+  if (branchPhone) {
+    const text = [`Remito ${numero} (${remito.fecha})`, `${remito.origin} → ${remito.branch.name}`, abs(publicRel)].join("\n");
+    wa = waLink(branchPhone, text);
+  }
+
+  remito.pdf = pdfRel;
+  remito.publicUrl = publicRel;
+  remito.wa = wa || null;
+
+  db.remitos = db.remitos || [];
+  db.remitos.push(remito);
+  saveDB(db);
+
+  res.json({ ok: true, id, numero, pdf: remito.pdf, publicUrl: remito.publicUrl, wa: remito.wa });
+});
+
+app.get("/remitos", (req, res) => {
+  const db = loadDB();
+  const list = (db.remitos || []).map(r => ({
+    id: r.id, numero: r.numero, fecha: r.fecha, branch: r.branch, origin: r.origin,
+    pdf: r.pdf, publicUrl: r.publicUrl, wa: r.wa || null, status: r.status
+  }));
+  list.sort((a,b)=> b.id - a.id);
+  res.json(list);
+});
+
+app.get("/remitos/:id", (req, res) => {
+  const db = loadDB();
+  const id = Number(req.params.id);
+  const r = (db.remitos || []).find(x => x.id === id);
+  if (!r) return res.status(404).json({ error: "No existe" });
+  res.json(r);
+});
+
+/* Escaneo por código */
+app.post("/remitos/:id/scan", (req, res) => {
+  const db = loadDB();
+  const id = Number(req.params.id);
+  const code = String(req.body.code || "").trim();
+  const remito = (db.remitos || []).find(x => x.id === id);
+  if (!remito) return res.status(404).json({ error: "No existe" });
+  if (!code) return res.status(400).json({ error: "Código requerido" });
+
+  const prod = (db.products || []).find(p => (p.codes || []).includes(code));
+  if (!prod) return res.status(404).json({ error: "Código no encontrado", reason: "unknown_code" });
+
+  const idx = remito.items.findIndex(it => fold(it.description) === fold(prod.description));
+  if (idx === -1) return res.status(400).json({ error: "Producto no figura en el remito", reason: "not_in_remito" });
+
+  const it = remito.items[idx];
+  it.received = Math.min(it.qty, (parseInt(it.received,10) || 0) + 1);
+
+  const allOk = remito.items.every(x => (parseInt(x.received,10)||0) === (parseInt(x.qty,10)||0));
+  const anyOver = remito.items.some(x => (parseInt(x.received,10)||0) > (parseInt(x.qty,10)||0));
+  const anyDiff = remito.items.some(x => (parseInt(x.received,10)||0) !== (parseInt(x.qty,10)||0));
+  remito.status = allOk && !anyOver ? "ok" : (anyDiff ? "diferencias" : "pendiente");
+
+  saveDB(db);
+  res.json({ ok: true, item: { index: idx, description: it.description, qty: it.qty, received: it.received }, status: remito.status });
+});
+
+/* Aprobación manual por descripción (como Enter en Pre‑Remito) */
+app.post("/remitos/:id/receive-by-desc", (req, res) => {
+  const db = loadDB();
+  const id = Number(req.params.id);
+  const q = fold(req.body.desc || "");
+  const remito = (db.remitos || []).find(x => x.id === id);
+  if (!remito) return res.status(404).json({ error: "No existe" });
+  if (!q) return res.status(400).json({ error: "desc requerido" });
+
+  const idx = remito.items.findIndex(it => fold(it.description).includes(q));
+  if (idx === -1) return res.status(404).json({ error: "No coincide con ningún renglón" });
+
+  const it = remito.items[idx];
+  it.received = Math.min(it.qty, (parseInt(it.received,10) || 0) + 1);
+
+  const allOk = remito.items.every(x => (parseInt(x.received,10)||0) === (parseInt(x.qty,10)||0));
+  const anyOver = remito.items.some(x => (parseInt(x.received,10)||0) > (parseInt(x.qty,10)||0));
+  const anyDiff = remito.items.some(x => (parseInt(x.received,10)||0) !== (parseInt(x.qty,10)||0));
+  remito.status = allOk && !anyOver ? "ok" : (anyDiff ? "diferencias" : "pendiente");
+
+  saveDB(db);
+  res.json({ ok: true, item: { index: idx, description: it.description, qty: it.qty, received: it.received }, status: remito.status });
+});
+
+app.post("/remitos/:id/close", (req, res) => {
+  const db = loadDB();
+  const id = Number(req.params.id);
+  const { action, note } = req.body || {};
+  const remito = (db.remitos || []).find(x => x.id === id);
+  if (!remito) return res.status(404).json({ error: "No existe" });
+
+  if (action === "ok") {
+    const allOk = remito.items.every(x => (parseInt(x.received,10)||0) === (parseInt(x.qty,10)||0));
+    if (!allOk) return res.status(400).json({ error: "No coincide todo; hay diferencias" });
+    remito.status = "ok";
+  } else if (action === "diferencias") {
+    remito.status = "diferencias";
+    remito.note = String(note || "");
+  }
+  saveDB(db);
+  res.json({ ok: true, status: remito.status });
+});
+
+/* =================== RECEPCIÓN HTML =================== */
+app.get("/r/:id", (req, res) => {
+  const db = loadDB();
+  const id = Number(req.params.id);
+  const r = (db.remitos || []).find(x => x.id === id);
+  if (!r) return res.status(404).send("Remito inexistente");
+
+  const waHref = r.wa ? r.wa : "https://wa.me/?text=" + encodeURIComponent("Remito " + r.numero);
+
+  // filas con códigos en data-codes (para mostrar debajo de la descripción)
+  const rowsHtml = (r.items || []).map((it, i) => {
+    const desc = String(it.description || "").replace(/"/g, "&quot;");
+    const qty  = parseInt(it.qty, 10) || 0;
+    const rec  = parseInt(it.received, 10) || 0;
+
+    const prod = (db.products || []).find(p => fold(p.description) === fold(it.description));
+    const codes = (prod?.codes || []).join(" ");
+
+    return `
+      <tr data-desc="${desc}" data-codes="${codes}">
+        <td>${i + 1}</td>
+        <td>${desc}${codes ? `<div style="color:#64748b;font-size:12px">${codes}</div>` : ""}</td>
+        <td>${qty}</td>
+        <td id="rcv_${i}">${rec}</td>
+      </tr>`;
+  }).join("");
+
+  const html = `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Recepción de Remito ${r.numero}</title>
+<style>
+  :root{ --line:#e2e8f0; --muted:#64748b; --primary:#0ea5e9; }
+  body{font-family:system-ui;margin:0;background:#f6faff;color:#0f172a}
+  .wrap{max-width:900px;margin:0 auto;padding:16px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}
+  .row{display:flex;gap:10px;align-items:center}
+  .input{padding:10px;border:1px solid var(--line);border-radius:10px;width:100%}
+  .btn{padding:10px 14px;border-radius:10px;border:1px solid var(--primary);background:var(--primary);color:#fff;cursor:pointer;text-decoration:none;display:inline-block}
+  .btn.secondary{background:#fff;color:var(--primary)}
+  table{border-collapse:collapse;width:100%}
+  td,th{border-top:1px solid var(--line);padding:8px}
+  thead th{background:#f1f5f9}
+  .pill{padding:4px 8px;border:1px solid var(--line);border-radius:999px;font-size:12px}
+  .pill.ok{background:#ecfeff}
+  .pill.diff{background:#fff1f2}
+  .pill.pend{background:#fff7ed}
+  .sugg{position:absolute;z-index:20;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;max-height:260px;overflow:auto}
+  .sugg div{padding:8px;cursor:pointer}
+  .sugg div:hover{background:#f8fafc}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2>Recepción — Remito ${r.numero}</h2>
+  <div class="card">
+    <div class="row" style="flex-wrap:wrap">
+      <div><b>Fecha:</b> ${r.fecha}</div>
+      <div><b>Origen:</b> ${r.origin}</div>
+      <div><b>Destino:</b> ${r.branch?.name || ""}</div>
+      <div><b>Estado:</b> <span id="st" class="pill ${r.status === "ok" ? "ok" : (r.status === "diferencias" ? "diff" : "pend")}">${String(r.status || "").toUpperCase()}</span></div>
+    </div>
+
+    <div class="row" style="margin-top:10px; flex-wrap:wrap; position:relative">
+      <input id="scan" class="input" placeholder="Escaneá o pegá un código y Enter" />
+      <div style="flex:1; position:relative">
+        <input id="find" class="input" placeholder="Escribí producto y Enter para sumar" autocomplete="off"/>
+        <div id="sugg" class="sugg" style="display:none"></div>
+      </div>
+      <button class="btn secondary" onclick="reload()">Actualizar</button>
+      <a class="btn secondary" href="${waHref}" target="_blank">WhatsApp</a>
+    </div>
+
+    <div style="margin-top:12px">
+      <table>
+        <thead><tr><th>#</th><th>Descripción</th><th>Enviado</th><th>Recibido</th></tr></thead>
+        <tbody id="tb">
+          ${rowsHtml}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <button class="btn" onclick="closeOk()">OK Final</button>
+      <button class="btn secondary" onclick="sendDiff()">Enviar diferencias</button>
+      <div id="msg" style="margin-left:auto;color:#059669"></div>
+    </div>
+    <div id="scanErr" style="color:#b91c1c;margin-top:8px"></div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <div><b>PDF:</b> <a href="${r.pdf}" target="_blank">${r.pdf}</a></div>
+    <iframe title="PDF" src="${r.pdf}" style="width:100%;height:520px;border:1px solid var(--line);border-radius:10px;margin-top:6px"></iframe>
+  </div>
+</div>
+
+<script>
+  const BASE = location.origin.replace(':5173', ':4000');
+  const RID = ${r.id};
+
+  function showMsg(t){ const e=document.getElementById('msg'); e.textContent=t; setTimeout(()=>e.textContent='', 2500); }
+  function showErr(id, t){ const e=document.getElementById(id); e.textContent=t; setTimeout(()=>e.textContent='', 2500); }
+  function cls(c){ return c==='ok'?'ok':(c==='diferencias'?'diff':'pend'); }
+  function fold(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/\\p{Diacritic}/gu,'').replace(/\\s+/g,' ').trim(); }
+
+  async function reload(){
+    const rr = await fetch(BASE + '/remitos/' + RID);
+    const data = await rr.json();
+    (data.items||[]).forEach((it,i)=>{ const td=document.getElementById('rcv_'+i); if(td) td.textContent=it.received||0; });
+    const st=document.getElementById('st'); st.textContent=String(data.status||'').toUpperCase(); st.className='pill '+cls(data.status||'pendiente');
+  }
+
+  /* ========= Escanear código ========= */
+  document.getElementById('scan').addEventListener('keydown', async (e)=>{
+    if (e.key !== 'Enter') return;
+    const t = e.target.value.trim(); if(!t) return;
+    e.target.value=''; document.getElementById('scanErr').textContent='';
+    const rr = await fetch(BASE + '/remitos/' + RID + '/scan', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: t }) });
+    if(!rr.ok){
+      const j=await rr.json().catch(async()=>({error:await rr.text()}));
+      if(j.reason==='unknown_code'){ alert('Código desconocido. Debe cargarse en Central/Productos.'); return; }
+      if(j.reason==='not_in_remito'){ alert('El producto existe, pero no está en este remito.'); return; }
+      showErr('scanErr', j.error||'No se pudo registrar'); return;
+    }
+    const j = await rr.json();
+    if (j && j.item){ const td=document.getElementById('rcv_'+j.item.index); if(td) td.textContent=j.item.received; }
+    const st=document.getElementById('st'); st.textContent=String(j.status||'').toUpperCase(); st.className='pill '+cls(j.status||'pendiente');
+  });
+
+  /* ========= Sugerencias por descripción del remito + Enter para sumar ========= */
+  const findInput = document.getElementById('find');
+  const suggBox = document.getElementById('sugg');
+  let suggList = [];
+  let suggIndex = -1;
+
+  function buildSuggestions(q){
+    const rows = Array.from(document.querySelectorAll('#tb tr'));
+    const fq = fold(q);
+    const items = rows.map((tr, idx) => {
+      const desc = tr.getAttribute('data-desc')||'';
+      const codes = tr.getAttribute('data-codes')||'';
+      const text = (desc + ' ' + codes);
+      const match = fq ? fold(text).includes(fq) : true;
+      return match ? { idx, desc, codes } : null;
+    }).filter(Boolean);
+    return items.slice(0, 20);
+  }
+
+  function renderSugg(){
+    if (suggList.length === 0){ suggBox.style.display = 'none'; suggBox.innerHTML=''; return; }
+    suggBox.style.display = 'block';
+    suggBox.innerHTML = suggList.map((it,i)=>\`
+      <div data-i="\${i}" style="\${i===suggIndex?'background:#f8fafc':''}">
+        <div style="font-weight:600">\${it.desc}</div>
+        <div style="color:#64748b;font-size:12px">\${it.codes||'—'}</div>
+      </div>\`).join('');
+    Array.from(suggBox.children).forEach(div=>{
+      div.onclick = ()=>{ const i = Number(div.getAttribute('data-i')); choose(i); };
+    });
+  }
+
+  async function choose(i){
+    if (i<0 || i>=suggList.length) return;
+    const it = suggList[i];
+    // sumo 1 por descripción
+    const rr = await fetch(BASE + '/remitos/' + RID + '/receive-by-desc', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ desc: it.desc })
+    });
+    if(!rr.ok){ const j=await rr.json().catch(()=>({})); alert(j.error||'No se pudo registrar'); return; }
+    const j = await rr.json();
+    // reflejo
+    const td=document.getElementById('rcv_'+j.item.index); if(td) td.textContent=j.item.received;
+    const st=document.getElementById('st'); st.textContent=String(j.status||'').toUpperCase(); st.className='pill '+cls(j.status||'pendiente');
+
+    // limpiar UI
+    findInput.value = '';
+    suggList = []; suggIndex=-1; renderSugg();
+  }
+
+  findInput.addEventListener('input', (e)=>{
+    suggIndex = -1;
+    suggList = buildSuggestions(e.target.value);
+    renderSugg();
+  });
+
+  findInput.addEventListener('keydown', (e)=>{
+    if (suggList.length === 0) return;
+    if (e.key === 'ArrowDown'){ suggIndex = (suggIndex + 1) % suggList.length; renderSugg(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp'){ suggIndex = (suggIndex - 1 + suggList.length) % suggList.length; renderSugg(); e.preventDefault(); }
+    else if (e.key === 'Enter'){ if (suggIndex === -1) suggIndex = 0; choose(suggIndex); e.preventDefault(); }
+    else if (e.key === 'Escape'){ suggList=[]; suggIndex=-1; renderSugg(); }
+  });
+
+  /* ========= Cierre ========= */
+  async function closeOk(){
+    const rr=await fetch(BASE + '/remitos/' + RID + '/close', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'ok' }) });
+    if(!rr.ok){ const j=await rr.json().catch(()=>({})); alert(j.error||'No se pudo cerrar en OK'); return; }
+    showMsg('Remito cerrado en OK'); reload();
+  }
+
+  async function sendDiff(){
+    const note = prompt('Describí las diferencias:','');
+    const rr = await fetch(BASE + '/remitos/' + RID + '/close', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'diferencias', note }) });
+    if(!rr.ok){ alert('No se pudo enviar diferencias'); return; }
+    showMsg('Diferencias enviadas'); reload();
+  }
+</script>
+</body></html>`;
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
+});
+
+/* =================== START =================== */
 app.listen(PORT, () => {
   console.log(`API on http://localhost:${PORT}`);
 });
